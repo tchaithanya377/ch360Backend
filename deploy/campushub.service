@@ -1,0 +1,21 @@
+[Unit]
+Description=Campushub Django (Gunicorn)
+After=network.target
+
+[Service]
+User=campushub
+Group=campushub
+WorkingDirectory=/srv/campushub/app
+EnvironmentFile=/etc/campushub.env
+ExecStart=/bin/bash -lc ". .venv/bin/activate && ./run-gunicorn.sh"
+Restart=always
+RestartSec=5
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+
+

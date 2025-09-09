@@ -1,0 +1,33 @@
+{
+  "serviceNamespace": "ecs",
+  "resourceId": "service/campushub-cluster/campushub-service",
+  "scalableDimension": "ecs:service:DesiredCount",
+  "minCapacity": 2,
+  "maxCapacity": 10,
+  "policies": [
+    {
+      "policyName": "cpu-target-tracking",
+      "policyType": "TargetTrackingScaling",
+      "targetTrackingScalingPolicyConfiguration": {
+        "targetValue": 70.0,
+        "scaleOutCooldown": 120,
+        "scaleInCooldown": 300,
+        "predefinedMetricSpecification": {
+          "predefinedMetricType": "ECSServiceAverageCPUUtilization"
+        }
+      }
+    },
+    {
+      "policyName": "memory-target-tracking",
+      "policyType": "TargetTrackingScaling",
+      "targetTrackingScalingPolicyConfiguration": {
+        "targetValue": 75.0,
+        "scaleOutCooldown": 120,
+        "scaleInCooldown": 300,
+        "predefinedMetricSpecification": {
+          "predefinedMetricType": "ECSServiceAverageMemoryUtilization"
+        }
+      }
+    }
+  ]
+}
