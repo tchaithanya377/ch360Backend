@@ -8,11 +8,11 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=campshub360.settings
       - DEBUG=False
-      - SECRET_KEY=change-me-in-prod-please
+      - SECRET_KEY=django-insecure-$(openssl rand -base64 32)
       - GUNICORN_WORKER_CLASS=sync
       - GUNICORN_WORKER_CONNECTIONS=1000
       - REDIS_URL=redis://redis:6379/0
-      - POSTGRES_DB=campushub
+      - POSTGRES_DB=campushub360
       - POSTGRES_USER=campushub
       - POSTGRES_PASSWORD=Campushub123
       - POSTGRES_HOST=campushub.cl00sagomrhg.ap-south-1.rds.amazonaws.com

@@ -52,8 +52,8 @@ RUN python -m pip install --upgrade pip \
 # Copy application code
 COPY . /app
 
-# Ensure scripts are executable
-RUN chmod +x /app/run-gunicorn.sh
+# Ensure scripts are executable (if they exist)
+RUN if [ -f /app/run-gunicorn.sh ]; then chmod +x /app/run-gunicorn.sh; fi
 
 # Create writable dirs for Django collectstatic/media if using read-only root in orchestrators
 RUN mkdir -p /app/staticfiles /app/media && chown -R appuser:appuser /app
