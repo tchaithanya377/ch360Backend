@@ -1,6 +1,21 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Student, StudentEnrollmentHistory, StudentDocument, CustomField, StudentCustomFieldValue, StudentImport
+from django.db import transaction
+from .models import (
+    Student,
+    StudentEnrollmentHistory,
+    StudentDocument,
+    CustomField,
+    StudentCustomFieldValue,
+    StudentImport,
+    AcademicYear,
+    Semester,
+    StudentBatch,
+    Religion,
+    Caste,
+    Quota,
+    StudentIdentifier,
+)
 
 
 class StudentEnrollmentHistoryInline(admin.TabularInline):
@@ -28,12 +43,12 @@ class StudentCustomFieldValueInline(admin.TabularInline):
 class StudentAdmin(admin.ModelAdmin):
     """Admin configuration for Student model"""
     list_display = [
-        'roll_number', 'full_name', 'year_of_study', 'semester', 'section', 'status', 
+        'roll_number', 'full_name', 'department', 'academic_program', 'year_of_study', 'semester', 'section', 'status', 
         'email', 'student_mobile', 'enrollment_date', 'age'
     ]
     list_filter = [
         'status', 'year_of_study', 'semester', 'section', 'gender', 'quota', 'religion',
-        'enrollment_date', 'created_at', 'updated_at'
+        'department', 'academic_program', 'enrollment_date', 'created_at', 'updated_at'
     ]
     search_fields = [
         'roll_number', 'first_name', 'last_name', 'email', 
@@ -44,6 +59,7 @@ class StudentAdmin(admin.ModelAdmin):
         'created_at', 'updated_at', 'created_by', 'updated_by'
     ]
     inlines = [StudentEnrollmentHistoryInline, StudentDocumentInline, StudentCustomFieldValueInline]
+    actions = ['action_assign_to_batches_with_capacity']
     
     fieldsets = (
         ('Basic Information', {
@@ -54,7 +70,7 @@ class StudentAdmin(admin.ModelAdmin):
         }),
         ('Academic Information', {
             'fields': (
-                'section', 'academic_year', 'year_of_study', 'semester', 'quota', 'rank'
+                'department', 'academic_program', 'section', 'academic_year', 'year_of_study', 'semester', 'quota', 'rank'
             )
         }),
         ('Contact Information', {
@@ -121,6 +137,83 @@ class StudentAdmin(admin.ModelAdmin):
         """Display student full name"""
         return obj.full_name
     full_name.short_description = 'Full Name'
+
+    @admin.action(description="Create/Update Student Batches for selected students with capacity checks")
+    def action_assign_to_batches_with_capacity(self, request, queryset):
+        """Group students by Department-Year-Section-AcademicYear and ensure a StudentBatch exists.
+
+        - Creates missing batches with a default max_capacity (60)
+        - Increments current_count up to capacity; skips overflow and reports
+        Note: There is no explicit FK from Student to StudentBatch; this action manages batches and counts only.
+        """
+        created = 0
+        updated = 0
+        skipped = 0
+        errors = []
+
+        # Map to keep track of increments per batch in this run to avoid double counting
+        from collections import defaultdict
+        planned_increments = defaultdict(int)
+
+        # Preload academic years
+        ay_cache = {a.year: a for a in AcademicYear.objects.all()}
+
+        with transaction.atomic():
+            for student in queryset.select_related('department'):
+                if not (student.department and student.year_of_study and student.section):
+                    skipped += 1
+                    errors.append(f"Missing grouping fields for {student.roll_number}")
+                    continue
+
+                # Determine academic year object from student's string field or current_academic_year
+                ay_str = student.academic_year or (student.current_academic_year.year if student.current_academic_year else None)
+                if not ay_str:
+                    skipped += 1
+                    errors.append(f"Missing academic_year for {student.roll_number}")
+                    continue
+
+                ay = ay_cache.get(ay_str)
+                if not ay:
+                    ay = AcademicYear.objects.create(year=ay_str, start_date=student.enrollment_date, end_date=student.enrollment_date)
+                    ay_cache[ay_str] = ay
+
+                batch_name = f"{student.department.short_name}-{ay.year}-{student.year_of_study}-{student.section}"
+                batch, created_flag = StudentBatch.objects.get_or_create(
+                    department=student.department,
+                    academic_year=ay,
+                    year_of_study=student.year_of_study,
+                    section=student.section,
+                    defaults={
+                        'batch_name': batch_name,
+                        'max_capacity': 60,
+                        'current_count': 0,
+                        'is_active': True,
+                    }
+                )
+                if created_flag:
+                    created += 1
+                else:
+                    updated += 1
+
+                # Capacity enforcement per run (not persisted link)
+                if (batch.current_count + planned_increments[batch.pk]) < batch.max_capacity:
+                    planned_increments[batch.pk] += 1
+                else:
+                    skipped += 1
+                    errors.append(f"Batch full: {batch.batch_name} for {student.roll_number}")
+
+            # Apply increments
+            for batch_id, inc in planned_increments.items():
+                if inc > 0:
+                    b = StudentBatch.objects.select_for_update().get(pk=batch_id)
+                    b.current_count = min(b.max_capacity, b.current_count + inc)
+                    b.save(update_fields=['current_count'])
+
+        msg = f"Batches created: {created}, touched: {updated}, assigned: {sum(planned_increments.values())}, skipped: {skipped}"
+        if errors:
+            self.message_user(request, msg + f". Issues: {len(errors)}. See admin log for details.")
+        else:
+            self.message_user(request, msg)
 
 
 @admin.register(StudentEnrollmentHistory)
@@ -190,6 +283,62 @@ class StudentDocumentAdmin(admin.ModelAdmin):
         if not change:  # New object
             obj.uploaded_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(AcademicYear)
+class AcademicYearAdmin(admin.ModelAdmin):
+    list_display = ['year', 'start_date', 'end_date', 'is_current', 'is_active']
+    list_filter = ['is_current', 'is_active']
+    search_fields = ['year']
+    ordering = ['-year']
+
+
+@admin.register(Semester)
+class SemesterAdmin(admin.ModelAdmin):
+    list_display = ['name', 'academic_year', 'semester_type', 'start_date', 'end_date', 'is_current', 'is_active']
+    list_filter = ['semester_type', 'is_current', 'is_active', 'academic_year']
+    search_fields = ['name', 'academic_year__year']
+    ordering = ['academic_year__year', 'semester_type']
+
+
+@admin.register(StudentBatch)
+class StudentBatchAdmin(admin.ModelAdmin):
+    list_display = ['batch_name', 'department', 'academic_year', 'year_of_study', 'section', 'current_count', 'max_capacity', 'is_active']
+    list_filter = ['department', 'academic_year', 'year_of_study', 'section', 'is_active']
+    search_fields = ['batch_name', 'department__name', 'academic_year__year']
+    ordering = ['department__name', 'academic_year__year', 'year_of_study', 'section']
+
+
+@admin.register(Religion)
+class ReligionAdmin(admin.ModelAdmin):
+    list_display = ['code', 'name', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['code', 'name']
+    ordering = ['name']
+
+
+@admin.register(Caste)
+class CasteAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'is_active']
+    list_filter = ['category', 'is_active']
+    search_fields = ['name', 'category']
+    ordering = ['name']
+
+
+@admin.register(Quota)
+class QuotaAdmin(admin.ModelAdmin):
+    list_display = ['code', 'name', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['code', 'name']
+    ordering = ['name']
+
+
+@admin.register(StudentIdentifier)
+class StudentIdentifierAdmin(admin.ModelAdmin):
+    list_display = ['student', 'id_type', 'identifier', 'is_primary', 'is_verified']
+    list_filter = ['id_type', 'is_primary', 'is_verified']
+    search_fields = ['student__roll_number', 'student__first_name', 'student__last_name', 'identifier']
+    ordering = ['student__roll_number', 'id_type']
 
 
 @admin.register(CustomField)

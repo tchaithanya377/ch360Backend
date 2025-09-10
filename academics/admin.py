@@ -10,10 +10,23 @@ from .models import (
 
 @admin.register(AcademicProgram)
 class AcademicProgramAdmin(admin.ModelAdmin):
-    list_display = ['code', 'name', 'level', 'department', 'duration_years', 'total_credits', 'is_active']
-    list_filter = ['level', 'department', 'is_active']
+    list_display = ['code', 'name', 'level', 'department', 'duration_years', 'total_credits', 'status', 'is_active']
+    list_filter = ['level', 'department', 'status', 'is_active']
     search_fields = ['name', 'code', 'description']
     ordering = ['level', 'name']
+    fields = ['name', 'code', 'level', 'department', 'duration_years', 'total_credits', 'description', 'status', 'is_active']
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Provide default status in the admin add form
+        if not obj:
+            form.base_fields['status'].initial = 'ACTIVE'
+        return form
+
+    def save_model(self, request, obj, form, change):
+        if not obj.status:
+            obj.status = 'ACTIVE'
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Course)

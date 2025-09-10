@@ -1443,7 +1443,6 @@ def download_template(request):
             'middle_name': ['A', 'B', 'C'],
             'date_of_birth': ['2010-01-15', '2010-03-20', '2010-06-10'],
             'gender': ['M', 'F', 'M'],
-            'grade_level': ['10', '11', '12'],
             'section': ['A', 'B', 'A'],
             'academic_year': ['2023-2024', '2023-2024', '2023-2024'],
             'email': ['john.doe@example.com', 'jane.smith@example.com', 'mike.johnson@example.com'],
@@ -1478,7 +1477,7 @@ def download_template(request):
             instructions_data = {
                 'Field': [
                     'roll_number', 'first_name', 'last_name', 'middle_name', 'date_of_birth', 'gender',
-                    'grade_level', 'section', 'academic_year', 'email', 'student_mobile', 'quota', 'rank',
+                    'section', 'academic_year', 'email', 'student_mobile', 'quota', 'rank',
                     'status', 'father_name', 'mother_name', 'father_mobile', 'mother_mobile', 'address',
                     'city', 'state', 'country', 'postal_code'
                 ],
@@ -1489,13 +1488,13 @@ def download_template(request):
                 'Description': [
                     'Unique student identifier', 'Student first name', 'Student last name', 'Student middle name',
                     'Date of birth (YYYY-MM-DD)', 'Gender: M (Male), F (Female), O (Other)',
-                    'Grade level: 1-12', 'Section: A, B, C, D, E', 'Academic year (e.g., 2023-2024)',
+                    'Section: A, B, C, D, E', 'Academic year (e.g., 2023-2024)',
                     'Student email address', 'Student phone number', 'Quota category', 'Academic rank',
                     'Status: ACTIVE, INACTIVE, GRADUATED', 'Father name', 'Mother name', 'Father phone',
                     'Mother phone', 'Full address', 'City', 'State', 'Country', 'Postal code'
                 ],
                 'Example': [
-                    'STU001', 'John', 'Doe', 'A', '2010-01-15', 'M', '10', 'A', '2023-2024',
+                    'STU001', 'John', 'Doe', 'A', '2010-01-15', 'M', 'A', '2023-2024',
                     'john.doe@example.com', '+1234567890', 'GENERAL', '1', 'ACTIVE', 'John Doe Sr',
                     'Mary Doe', '+1234567893', '+1234567896', '123 Main St', 'New York', 'NY', 'USA', '10001'
                 ]
@@ -1566,18 +1565,9 @@ def process_student_import(file, import_record, skip_errors, create_login, updat
                 date_of_birth = str(row['date_of_birth']).strip()
                 gender = str(row['gender']).strip().upper()
                 
-                # Handle optional grade_level
-                grade_level = None
-                if not pd.isna(row.get('grade_level', '')) and str(row['grade_level']).strip() != '':
-                    grade_level = str(row['grade_level']).strip()
-                
                 # Validate gender
                 if gender not in ['M', 'F', 'O']:
                     raise ValueError(f"Invalid gender '{gender}'. Must be M, F, or O")
-                
-                # Validate grade level (if provided)
-                if grade_level is not None and grade_level not in [str(i) for i in range(1, 13)]:
-                    raise ValueError(f"Invalid grade level '{grade_level}'. Must be 1-12")
                 
                 # Validate date format
                 try:
@@ -1609,8 +1599,7 @@ def process_student_import(file, import_record, skip_errors, create_login, updat
                 student.last_name = last_name
                 student.date_of_birth = date_of_birth
                 student.gender = gender
-                if grade_level is not None:
-                    student.grade_level = grade_level
+                # grade_level removed in schema; ignore if present in file
                 
                 # Set optional fields
                 if not pd.isna(row.get('middle_name', '')):
@@ -1670,6 +1659,28 @@ def process_student_import(file, import_record, skip_errors, create_login, updat
                 
                 # Save student
                 student.save()
+
+                # Ensure login/identifiers if requested
+                if create_login:
+                    try:
+                        if student.user:
+                            from accounts.models import AuthIdentifier, IdentifierType
+                            if student.email:
+                                AuthIdentifier.objects.get_or_create(
+                                    user=student.user,
+                                    identifier=student.email,
+                                    id_type=IdentifierType.EMAIL,
+                                    defaults={'is_primary': True}
+                                )
+                            AuthIdentifier.objects.get_or_create(
+                                user=student.user,
+                                identifier=student.roll_number,
+                                id_type=IdentifierType.USERNAME,
+                                defaults={'is_primary': not bool(student.email)}
+                            )
+                    except Exception:
+                        pass
+
                 success_count += 1
                 
             except Exception as e:

@@ -11,6 +11,11 @@ from students.models import Student
 
 class AcademicProgram(models.Model):
     """Model for academic programs/degrees"""
+    PROGRAM_STATUS = [
+        ('ACTIVE', 'Active'),
+        ('INACTIVE', 'Inactive'),
+        ('ARCHIVED', 'Archived'),
+    ]
     PROGRAM_LEVELS = [
         ('UG', 'Undergraduate'),
         ('PG', 'Postgraduate'),
@@ -27,6 +32,7 @@ class AcademicProgram(models.Model):
     total_credits = models.PositiveIntegerField(help_text="Total credits required for graduation")
     description = models.TextField(blank=True, help_text="Program description")
     is_active = models.BooleanField(default=True)
+    status = models.CharField(max_length=20, choices=PROGRAM_STATUS, default='ACTIVE', db_default='ACTIVE')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -37,6 +43,12 @@ class AcademicProgram(models.Model):
     
     def __str__(self):
         return f"{self.code} - {self.name}"
+
+    def save(self, *args, **kwargs):
+        # Ensure status is always set to a valid value
+        if not self.status:
+            self.status = 'ACTIVE'
+        super().save(*args, **kwargs)
 
 
 class Course(models.Model):

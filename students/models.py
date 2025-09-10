@@ -17,6 +17,83 @@ class TimeStampedUUIDModel(models.Model):
         abstract = True
 
 
+class AcademicYear(models.Model):
+    """Academic year entity (e.g., 2024-2025)"""
+    year = models.CharField(max_length=9, unique=True, help_text="e.g., 2024-2025")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_current = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-year']
+
+    def __str__(self):
+        return self.year
+
+
+class Semester(models.Model):
+    """Semester within an academic year"""
+    SEMESTER_TYPES = [
+        ('ODD', 'Odd Semester (Fall)'),
+        ('EVEN', 'Even Semester (Spring)'),
+        ('SUMMER', 'Summer Semester'),
+    ]
+
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE, related_name='semesters')
+    name = models.CharField(max_length=50, help_text="e.g., Fall 2024, Spring 2025")
+    semester_type = models.CharField(max_length=10, choices=SEMESTER_TYPES)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_current = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('academic_year', 'semester_type')
+        ordering = ['academic_year', 'semester_type']
+
+    def __str__(self):
+        return f"{self.name} ({self.academic_year.year})"
+
+
+# Lookup tables for normalization
+class Religion(models.Model):
+    code = models.CharField(max_length=10, unique=True)
+    name = models.CharField(max_length=50)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Quota(models.Model):
+    code = models.CharField(max_length=20, unique=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Caste(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    category = models.CharField(max_length=20, blank=True, null=True)  # SC, ST, OBC, etc.
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class Student(TimeStampedUUIDModel):
     """Student model for managing student information"""
     
@@ -63,27 +140,6 @@ class Student(TimeStampedUUIDModel):
         ('E', 'Section E'),
     ]
     
-    QUOTA_CHOICES = [
-        ('GENERAL', 'General'),
-        ('SC', 'Scheduled Caste'),
-        ('ST', 'Scheduled Tribe'),
-        ('OBC', 'Other Backward Class'),
-        ('EWS', 'Economically Weaker Section'),
-        ('PHYSICALLY_CHALLENGED', 'Physically Challenged'),
-        ('SPORTS', 'Sports Quota'),
-        ('NRI', 'NRI Quota'),
-    ]
-    
-    RELIGION_CHOICES = [
-        ('HINDU', 'Hindu'),
-        ('MUSLIM', 'Muslim'),
-        ('CHRISTIAN', 'Christian'),
-        ('SIKH', 'Sikh'),
-        ('BUDDHIST', 'Buddhist'),
-        ('JAIN', 'Jain'),
-        ('OTHER', 'Other'),
-    ]
-    
     # Basic Information (RollNumber equivalent to student_id)
     roll_number = models.CharField(
         max_length=20, 
@@ -101,7 +157,21 @@ class Student(TimeStampedUUIDModel):
     academic_year = models.CharField(max_length=9, help_text="e.g., 2023-2024", blank=True, null=True)
     year_of_study = models.CharField(max_length=1, choices=YEAR_OF_STUDY_CHOICES, default='1', help_text="Current year of study (1st, 2nd, 3rd, 4th year)")
     semester = models.CharField(max_length=2, choices=SEMESTER_CHOICES, default='1', help_text="Current semester")
-    quota = models.CharField(max_length=25, choices=QUOTA_CHOICES, blank=True, null=True)
+    current_academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='current_students'
+    )
+    current_semester = models.ForeignKey(
+        Semester,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='current_students'
+    )
+    quota = models.ForeignKey(Quota, on_delete=models.SET_NULL, null=True, blank=True)
     rank = models.IntegerField(blank=True, null=True, help_text="Academic or admission rank")
     department = models.ForeignKey(
         'departments.Department',
@@ -157,9 +227,9 @@ class Student(TimeStampedUUIDModel):
         ]
     )
     
-    # Religious and Caste Information
-    religion = models.CharField(max_length=20, choices=RELIGION_CHOICES, blank=True, null=True)
-    caste = models.CharField(max_length=100, blank=True, null=True)
+    # Religious and Caste Information (normalized)
+    religion = models.ForeignKey(Religion, on_delete=models.SET_NULL, null=True, blank=True)
+    caste = models.ForeignKey(Caste, on_delete=models.SET_NULL, null=True, blank=True)
     subcaste = models.CharField(max_length=100, blank=True, null=True)
     
     # Parent Information (normalized via StudentContact)
@@ -296,6 +366,33 @@ class Student(TimeStampedUUIDModel):
             self.country
         ]
         return ', '.join([part for part in address_parts if part])
+
+
+class StudentBatch(models.Model):
+    """Grouping of students by department, academic year, year of study and section"""
+    department = models.ForeignKey(
+        'departments.Department',
+        on_delete=models.CASCADE,
+        related_name='student_batches'
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name='student_batches'
+    )
+    year_of_study = models.CharField(max_length=1, choices=Student.YEAR_OF_STUDY_CHOICES)
+    section = models.CharField(max_length=1, choices=Student.SECTION_CHOICES)
+    batch_name = models.CharField(max_length=100, help_text="e.g., CS-2024-1-A")
+    max_capacity = models.PositiveIntegerField(default=60)
+    current_count = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('department', 'academic_year', 'year_of_study', 'section')
+        ordering = ['department', 'academic_year', 'year_of_study', 'section']
+
+    def __str__(self):
+        return self.batch_name
 
 
 class StudentContact(TimeStampedUUIDModel):

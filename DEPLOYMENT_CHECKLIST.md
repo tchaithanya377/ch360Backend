@@ -1,3 +1,36 @@
+## Production environment variables (sample)
+
+Create a `.env` using these keys (see `.env.example` if present):
+
+```
+DEBUG=false
+SECRET_KEY=<strong-random>
+ALLOWED_HOSTS=your.domain,www.your.domain,api.your.domain
+DATABASE_URL=postgres://campushub:StrongPass@db-host:5432/campushub
+REDIS_URL=redis://redis-host:6379/0
+JWT_ACCESS_MINUTES=15
+JWT_REFRESH_DAYS=7
+AUTH_RATE_LIMIT_TOKEN=20/m
+AUTH_RATE_LIMIT_REFRESH=60/m
+CORS_ALLOWED_ORIGINS=https://your-frontend.example
+CSRF_TRUSTED_ORIGINS=https://your.domain,https://www.your.domain
+SECURE_SSL_REDIRECT=true
+FORCE_SECURE_COOKIES=true
+SECURE_HSTS_SECONDS=31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS=true
+SECURE_HSTS_PRELOAD=true
+GUNICORN_WORKERS=8
+GUNICORN_WORKER_CLASS=uvicorn.workers.UvicornWorker
+GUNICORN_KEEPALIVE=10
+GUNICORN_MAX_REQUESTS=2000
+GUNICORN_MAX_REQUESTS_JITTER=200
+```
+
+Notes:
+- Prefer `DATABASE_URL`; otherwise set discrete `POSTGRES_*` keys.
+- Use PgBouncer (transaction pooling) in front of Postgres.
+- Enable Redis to back caches and sessions.
+
 # ✅ AWS Deployment Checklist for CampsHub360
 
 ## 🚀 Pre-Deployment Checklist

@@ -8,7 +8,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
 from django.db.models import Q
-from .models import AuthIdentifier, IdentifierType, UserRole
+from .models import AuthIdentifier, IdentifierType
+from django.contrib.auth.models import Group
 try:
     from ratelimit.decorators import ratelimit
 except Exception:  # Fallback if ratelimit isn't installed in the running env
@@ -17,6 +18,7 @@ except Exception:  # Fallback if ratelimit isn't installed in the running env
             return view
         return _decorator
 from django.utils.decorators import method_decorator
+from django.conf import settings
 from students.signals import record_session
 from accounts.utils import extract_client_ip, geolocate_ip
 
@@ -122,12 +124,12 @@ class RollOrEmailTokenView(TokenObtainPairView):
     serializer_class = RollOrEmailTokenSerializer
 
 
-@method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=True), name='post')
+@method_decorator(ratelimit(key='ip', rate=getattr(settings, 'AUTH_RATE_LIMIT_TOKEN', '5/m'), method='POST', block=True), name='post')
 class RateLimitedTokenView(RollOrEmailTokenView):
     pass
 
 
-@method_decorator(ratelimit(key='ip', rate='10/m', method='POST', block=True), name='post')
+@method_decorator(ratelimit(key='ip', rate=getattr(settings, 'AUTH_RATE_LIMIT_REFRESH', '10/m'), method='POST', block=True), name='post')
 class RateLimitedRefreshView(TokenRefreshView):
     permission_classes = [AllowAny]
 
@@ -142,17 +144,12 @@ class RolesPermissionsView(APIView):
         if cached:
             return Response(cached)
 
+        # Use Django Groups as roles
         roles = list(
-            UserRole.objects.filter(user=request.user)
-            .select_related('role')
-            .values_list('role__name', flat=True)
+            request.user.groups.values_list('name', flat=True)
         )
-        # Gather permissions via Role -> RolePermission -> Permission
-        from .models import RolePermission
-        perms = sorted(set(
-            RolePermission.objects.filter(role__role_users__user=request.user)
-            .values_list('permission__codename', flat=True)
-        ))
+        # Use Django auth permissions the user has (including via groups)
+        perms = sorted(request.user.get_all_permissions())
         payload = {'roles': roles, 'permissions': perms}
         cache.set(cache_key, payload, timeout=60)
         return Response(payload)

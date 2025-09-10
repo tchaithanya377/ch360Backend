@@ -1,6 +1,6 @@
 import django_filters
 from django.db.models import Q
-from .models import Student, StudentEnrollmentHistory, StudentDocument, CustomField
+from .models import Student, StudentEnrollmentHistory, StudentDocument, CustomField, Quota
 
 
 class StudentFilter(django_filters.FilterSet):
@@ -27,7 +27,7 @@ class StudentFilter(django_filters.FilterSet):
     section = django_filters.ChoiceFilter(choices=Student.SECTION_CHOICES)
     gender = django_filters.ChoiceFilter(choices=Student.GENDER_CHOICES)
     status = django_filters.ChoiceFilter(choices=Student.STATUS_CHOICES)
-    quota = django_filters.ChoiceFilter(choices=Student.QUOTA_CHOICES)
+    quota = django_filters.ModelChoiceFilter(field_name='quota', queryset=Quota.objects.all())
     
     # Boolean filters
     has_login = django_filters.BooleanFilter(method='has_login_filter', label='Has Login Account')
@@ -54,8 +54,11 @@ class StudentFilter(django_filters.FilterSet):
             'village': ['exact', 'icontains'],
             'city': ['exact', 'icontains'],
             'state': ['exact', 'icontains'],
-            'religion': ['exact', 'icontains'],
-            'caste': ['exact', 'icontains'],
+            # Foreign keys: allow exact by id, name icontains via related field
+            'religion': ['exact'],
+            'caste': ['exact'],
+            'religion__name': ['icontains'],
+            'caste__name': ['icontains'],
             'subcaste': ['exact', 'icontains'],
         }
     
