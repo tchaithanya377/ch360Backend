@@ -132,6 +132,8 @@ class CourseSection(models.Model):
         indexes = [
             Index(fields=['faculty', 'academic_year', 'semester']),
             Index(fields=['is_active']),
+            Index(fields=['course', 'academic_year', 'semester'], name='idx_section_course_year_sem'),
+            Index(fields=['academic_year', 'semester', 'is_active'], name='idx_section_year_sem_active'),
         ]
     
     def __str__(self):
@@ -285,6 +287,7 @@ class CourseEnrollment(models.Model):
         indexes = [
             Index(fields=['student', 'status']),
             Index(fields=['course_section', 'status']),
+            Index(fields=['course_section'], name='idx_enroll_section_active', condition=Q(status='ENROLLED')),
         ]
     
     def __str__(self):

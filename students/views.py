@@ -22,7 +22,9 @@ class StudentViewSet(viewsets.ModelViewSet):
     ViewSet for managing students
     Provides CRUD operations for students
     """
-    queryset = Student.objects.all()
+    queryset = Student.objects.select_related(
+        'department', 'academic_program', 'current_academic_year', 'current_semester'
+    )
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
     
@@ -40,7 +42,9 @@ class StudentViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Filter queryset based on query parameters"""
-        queryset = Student.objects.all()
+        queryset = Student.objects.select_related(
+            'department', 'academic_program', 'current_academic_year', 'current_semester'
+        )
         
         # Search functionality
         search = self.request.query_params.get('search', None)
@@ -74,6 +78,15 @@ class StudentViewSet(viewsets.ModelViewSet):
         if program_filter:
             queryset = queryset.filter(academic_program=program_filter)
         
+        # Prefer FK filters when provided (non-breaking deprecation path)
+        current_academic_year_id = self.request.query_params.get('current_academic_year', None)
+        if current_academic_year_id:
+            queryset = queryset.filter(current_academic_year_id=current_academic_year_id)
+
+        current_semester_id = self.request.query_params.get('current_semester', None)
+        if current_semester_id:
+            queryset = queryset.filter(current_semester_id=current_semester_id)
+
         # Filter by gender
         gender_filter = self.request.query_params.get('gender', None)
         if gender_filter:

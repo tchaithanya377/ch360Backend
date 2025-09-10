@@ -110,6 +110,10 @@ class ExamSchedule(TimeStampedUUIDModel):
         ordering = ['exam_date', 'start_time']
         verbose_name = "Exam Schedule"
         verbose_name_plural = "Exam Schedules"
+        indexes = [
+            models.Index(fields=['exam_session', 'course', 'exam_date'], name='idx_exam_sched_sc_date'),
+            models.Index(fields=['exam_date'], name='idx_exam_sched_date'),
+        ]
     
     def __str__(self):
         return f"{self.course.code} - {self.title} ({self.exam_date})"
@@ -272,6 +276,9 @@ class ExamRegistration(TimeStampedUUIDModel):
         unique_together = ['student', 'exam_schedule']
         verbose_name = "Exam Registration"
         verbose_name_plural = "Exam Registrations"
+        indexes = [
+            models.Index(fields=['exam_schedule', 'status'], name='idx_examreg_schedule_status'),
+        ]
     
     def __str__(self):
         return f"{self.student.roll_number} - {self.exam_schedule} ({self.status})"

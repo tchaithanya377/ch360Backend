@@ -8,14 +8,21 @@ CACHES = {
 }
 
 import os
-REDIS_URL = os.environ.get('REDIS_URL')
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/1')
 if REDIS_URL:
     CACHES['default'] = {
         'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': REDIS_URL,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 50,
+                'retry_on_timeout': True,
+            },
+        },
+        'TIMEOUT': 300,  # 5 minutes default
+        'KEY_PREFIX': 'campushub',
+        'VERSION': 1,
     }
 """
 Django settings for campshub360 project.
@@ -357,7 +364,7 @@ else:
             'LOCATION': 'unique-snowflake',
             'TIMEOUT': int(os.getenv('CACHE_DEFAULT_TIMEOUT', '300')),
             'OPTIONS': {
-                'MAX_ENTRIES': 1000,
+                'MAX_ENTRIES': 10000,  # Increased for better performance
             }
         },
         'sessions': {

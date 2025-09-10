@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
+from django.core.cache import cache
 
 
 class HasRole(BasePermission):
@@ -14,7 +15,15 @@ class HasRole(BasePermission):
             return True
         if not user or not user.is_authenticated:
             return False
-        user_roles = set(user.user_roles.select_related('role').values_list('role__name', flat=True))
+        # Try cached roles first (seeded by RolesPermissionsView); fallback to DB
+        cache_key = f"rolesperms:v2:{user.id}"
+        cached = cache.get(cache_key)
+        if cached and 'roles' in cached:
+            user_roles = set(cached['roles'])
+        else:
+            user_roles = set(
+                user.user_roles.select_related('role').values_list('role__name', flat=True)
+            )
         return any(r in user_roles for r in roles)
 
 
@@ -31,10 +40,14 @@ class HasAnyPermission(BasePermission):
             return True
         if not user or not user.is_authenticated:
             return False
-        user_perms = set(
-            user.user_roles
-            .values_list('role__role_permissions__permission__codename', flat=True)
-        )
+        cache_key = f"rolesperms:v2:{user.id}"
+        cached = cache.get(cache_key)
+        if cached and 'permissions' in cached:
+            user_perms = set(cached['permissions'])
+        else:
+            user_perms = set(
+                user.user_roles.values_list('role__role_permissions__permission__codename', flat=True)
+            )
         return any(p in user_perms for p in perms)
 
 

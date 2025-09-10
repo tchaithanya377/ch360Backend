@@ -203,6 +203,9 @@ class EnrollmentRequest(models.Model):
         ordering = ['-request_date']
         verbose_name = "Enrollment Request"
         verbose_name_plural = "Enrollment Requests"
+        indexes = [
+            models.Index(fields=['course_section', 'status'], name='idx_enrollreq_section_status'),
+        ]
     
     def __str__(self):
         return f"{self.student.roll_number} - {self.course_section} ({self.status})"
@@ -252,6 +255,9 @@ class WaitlistEntry(models.Model):
         ordering = ['position', 'added_date']
         verbose_name = "Waitlist Entry"
         verbose_name_plural = "Waitlist Entries"
+        indexes = [
+            models.Index(fields=['course_section', 'position'], name='idx_waitlist_section_position'),
+        ]
     
     def __str__(self):
         return f"{self.student.roll_number} - {self.course_section} (Position {self.position})"

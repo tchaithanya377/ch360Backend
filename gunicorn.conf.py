@@ -1,55 +1,61 @@
+# Gunicorn configuration for horizontal scaling
 import multiprocessing
 import os
 
-# Bind to all interfaces inside container; ALB/Nginx terminates TLS
-bind = os.getenv('GUNICORN_BIND', '0.0.0.0:8000')
+# Server socket
+bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
+backlog = 2048
 
-# Workers: (2 x CPU) + 1 heuristic; allow override via env
-_cpu_count = multiprocessing.cpu_count()
-workers = int(os.getenv('GUNICORN_WORKERS', str(max(2, _cpu_count * 2 + 1))))
-
-# Worker class: use sync by default for compatibility
-worker_class = os.getenv('GUNICORN_WORKER_CLASS', 'sync')
+# Worker processes
+workers = int(os.getenv('GUNICORN_WORKERS', multiprocessing.cpu_count() * 2 + 1))
+worker_class = os.getenv('GUNICORN_WORKER_CLASS', 'gthread')
 worker_connections = int(os.getenv('GUNICORN_WORKER_CONNECTIONS', '1000'))
-threads = int(os.getenv('GUNICORN_THREADS', '1'))
+max_requests = int(os.getenv('GUNICORN_MAX_REQUESTS', '1000'))
+max_requests_jitter = int(os.getenv('GUNICORN_MAX_REQUESTS_JITTER', '100'))
 
-# App performance
-preload_app = True
-max_requests = int(os.getenv('GUNICORN_MAX_REQUESTS', '2000'))
-max_requests_jitter = int(os.getenv('GUNICORN_MAX_REQUESTS_JITTER', '200'))
-keepalive = int(os.getenv('GUNICORN_KEEPALIVE', '10'))
-backlog = int(os.getenv('GUNICORN_BACKLOG', '2048'))
-
-# Timeouts
-timeout = int(os.getenv('GUNICORN_TIMEOUT', '60'))
+# Timeout settings
+timeout = int(os.getenv('GUNICORN_TIMEOUT', '30'))
+keepalive = int(os.getenv('GUNICORN_KEEPALIVE', '2'))
 graceful_timeout = int(os.getenv('GUNICORN_GRACEFUL_TIMEOUT', '30'))
 
-# Security hardening
-limit_request_line = int(os.getenv('GUNICORN_LIMIT_REQUEST_LINE', '8190'))
-limit_request_fields = int(os.getenv('GUNICORN_LIMIT_REQUEST_FIELDS', '100'))
-limit_request_field_size = int(os.getenv('GUNICORN_LIMIT_REQUEST_FIELD_SIZE', '8190'))
-proxy_protocol = os.getenv('GUNICORN_PROXY_PROTOCOL', 'false').lower() == 'true'
-forwarded_allow_ips = os.getenv('GUNICORN_FORWARDED_ALLOW_IPS', '*')
-
 # Logging
-accesslog = os.getenv('GUNICORN_ACCESSLOG', '-')
-errorlog = os.getenv('GUNICORN_ERRORLOG', '-')
-loglevel = os.getenv('GUNICORN_LOGLEVEL', 'info')
+accesslog = os.getenv('GUNICORN_ACCESS_LOG', '-')
+errorlog = os.getenv('GUNICORN_ERROR_LOG', '-')
+loglevel = os.getenv('GUNICORN_LOG_LEVEL', 'info')
+access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
-# Health: adjust after fork (DB, etc.)
-def post_fork(server, worker):
-    # Reduce GC pressure for gevent workers
-    try:
-        import gevent.monkey  # noqa: F401
-    except Exception:
-        pass
+# Process naming
+proc_name = 'campushub360'
 
-# Lifecycle hooks for observability
+# Server mechanics
+daemon = False
+pidfile = '/tmp/gunicorn.pid'
+user = None
+group = None
+tmp_upload_dir = None
+
+# SSL (if needed)
+keyfile = os.getenv('SSL_KEYFILE')
+certfile = os.getenv('SSL_CERTFILE')
+
+# Preload app for better performance
+preload_app = True
+
+# Worker lifecycle
 def on_starting(server):
-    server.log.info('Gunicorn starting with %s workers', workers)
+    server.log.info("Starting CampusHub360 server...")
 
-def when_ready(server):
-    server.log.info('Gunicorn is ready. PID: %s', server.pid)
+def on_reload(server):
+    server.log.info("Reloading CampusHub360 server...")
 
-def worker_exit(server, worker):
-    server.log.info('Worker exited: %s', worker.pid)
+def worker_int(worker):
+    worker.log.info("Worker received INT or QUIT signal")
+
+def pre_fork(server, worker):
+    server.log.info("Worker spawned (pid: %s)", worker.pid)
+
+def post_fork(server, worker):
+    server.log.info("Worker spawned (pid: %s)", worker.pid)
+
+def worker_abort(worker):
+    worker.log.info("Worker received SIGABRT signal")

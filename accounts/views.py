@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions, status, exceptions
+from rest_framework import generics, permissions, status, exceptions, serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
@@ -8,8 +8,10 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
 from django.db.models import Q
-from .models import AuthIdentifier, IdentifierType
+from .models import AuthIdentifier, IdentifierType, Role, Permission as CustomPermission, RolePermission, UserRole
+from .models import UserSession
 from django.contrib.auth.models import Group
+from django.core.cache import cache
 try:
     from ratelimit.decorators import ratelimit
 except Exception:  # Fallback if ratelimit isn't installed in the running env
@@ -23,6 +25,7 @@ from students.signals import record_session
 from accounts.utils import extract_client_ip, geolocate_ip
 
 from .serializers import RegisterSerializer, UserSerializer
+from .permissions import HasRole, HasAnyPermission
 
 
 User = get_user_model()
@@ -58,15 +61,25 @@ class LogoutView(APIView):
 
 class RollOrEmailTokenSerializer(TokenObtainPairSerializer):
     """Custom token serializer accepting roll number or email as username field."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Override the username field to accept both username and email
+        self.fields['username'] = serializers.CharField(required=False)
+        self.fields['email'] = serializers.EmailField(required=False)
 
     def validate(self, attrs):
-        username = attrs.get('username') or attrs.get(self.username_field)
+        # Accept either username or email field
+        username = attrs.get('username')
+        email = attrs.get('email')
         password = attrs.get('password')
 
         user = None
-        # Try by email first
+        # Try by username first, then by email
         if username:
             user = self._get_user_by_identifier(username)
+        elif email:
+            user = self._get_user_by_identifier(email)
 
         if user is None:
             raise exceptions.AuthenticationFailed('Invalid credentials', code='authorization')
@@ -74,7 +87,9 @@ class RollOrEmailTokenSerializer(TokenObtainPairSerializer):
         if not user.check_password(password):
             raise exceptions.AuthenticationFailed('Invalid credentials', code='authorization')
 
-        data = super().validate({'email': user.email, 'password': password})
+        # Create a new attrs dict with email field for parent validation
+        parent_attrs = {'email': user.email, 'password': password}
+        data = super().validate(parent_attrs)
 
         request = self.context.get('request')
         if request:
@@ -96,6 +111,31 @@ class RollOrEmailTokenSerializer(TokenObtainPairSerializer):
             except Exception:
                 # DB might not have new columns yet; skip enrichment
                 pass
+
+            # Attach session/location metadata into token response (non-breaking extra fields)
+            try:
+                session_payload = {
+                    'ip': extract_client_ip(request),
+                    'login_at': getattr(usession, 'login_at', None),
+                    'country': getattr(usession, 'country', None),
+                    'region': getattr(usession, 'region', None),
+                    'city': getattr(usession, 'city', None),
+                    'latitude': getattr(usession, 'latitude', None),
+                    'longitude': getattr(usession, 'longitude', None),
+                }
+                data['session'] = session_payload
+            except Exception:
+                pass
+
+        # Also include minimal user info for clients
+        try:
+            data['user'] = {
+                'id': str(user.id),
+                'email': user.email,
+                'username': user.username,
+            }
+        except Exception:
+            pass
 
         return data
 
@@ -139,17 +179,175 @@ class RolesPermissionsView(APIView):
 
     def get(self, request):
         from django.core.cache import cache
-        cache_key = f"rolesperms:{request.user.id}"
+        cache_key = f"rolesperms:v2:{request.user.id}"
         cached = cache.get(cache_key)
         if cached:
             return Response(cached)
 
-        # Use Django Groups as roles
+        # Custom roles via UserRole
         roles = list(
-            request.user.groups.values_list('name', flat=True)
+            UserRole.objects.filter(user=request.user)
+            .select_related('role')
+            .values_list('role__name', flat=True)
         )
-        # Use Django auth permissions the user has (including via groups)
-        perms = sorted(request.user.get_all_permissions())
-        payload = {'roles': roles, 'permissions': perms}
-        cache.set(cache_key, payload, timeout=60)
+        # Custom permissions via RolePermission
+        perms = list(
+            RolePermission.objects.filter(role__role_users__user=request.user)
+            .select_related('permission')
+            .values_list('permission__codename', flat=True)
+            .distinct()
+        )
+        payload = {'roles': sorted(roles), 'permissions': sorted(perms)}
+        # Cache for 1 hour (3600 seconds) for better performance
+        cache.set(cache_key, payload, timeout=3600)
+        return Response(payload)
+
+
+class UserListView(generics.ListAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated, HasRole]
+    required_roles = ['Admin']
+
+    def get_queryset(self):
+        qs = User.objects.all().order_by('-date_joined')
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(Q(email__icontains=search) | Q(username__icontains=search))
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        try:
+            # Lightweight, serializer-free listing for speed and resiliency
+            qs = self.get_queryset().only('id', 'email', 'username', 'is_active', 'is_verified', 'date_joined')
+            try:
+                limit = int(request.query_params.get('limit', '50'))
+                offset = int(request.query_params.get('offset', '0'))
+            except ValueError:
+                limit, offset = 50, 0
+            total = qs.count()
+            rows = list(
+                qs.values('id', 'email', 'username', 'is_active', 'is_verified', 'date_joined')[offset:offset+limit]
+            )
+            return Response({'count': total, 'results': rows})
+        except Exception as exc:
+            return Response({'detail': 'Internal error', 'error': str(exc)}, status=500)
+
+
+class AssignRoleView(APIView):
+    permission_classes = [permissions.IsAuthenticated, HasRole]
+    required_roles = ['Admin']
+
+    def post(self, request):
+        user_id = request.data.get('user_id')
+        role_name = request.data.get('role')
+        if not user_id or not role_name:
+            return Response({'detail': 'user_id and role are required.'}, status=400)
+        try:
+            target_user = User.objects.get(id=user_id)
+            role = Role.objects.get(name=role_name)
+        except (User.DoesNotExist, Role.DoesNotExist):
+            return Response({'detail': 'User or Role not found.'}, status=404)
+        UserRole.objects.get_or_create(user=target_user, role=role, defaults={'assigned_by': request.user})
+        # Invalidate cached roles/permissions for the target user
+        cache.delete(f"rolesperms:v2:{target_user.id}")
+        return Response({'detail': 'Role assigned.'})
+
+
+class RevokeRoleView(APIView):
+    permission_classes = [permissions.IsAuthenticated, HasRole]
+    required_roles = ['Admin']
+
+    def post(self, request):
+        user_id = request.data.get('user_id')
+        role_name = request.data.get('role')
+        if not user_id or not role_name:
+            return Response({'detail': 'user_id and role are required.'}, status=400)
+        try:
+            target_user = User.objects.get(id=user_id)
+            role = Role.objects.get(name=role_name)
+        except (User.DoesNotExist, Role.DoesNotExist):
+            return Response({'detail': 'User or Role not found.'}, status=404)
+        UserRole.objects.filter(user=target_user, role=role).delete()
+        cache.delete(f"rolesperms:v2:{target_user.id}")
+        return Response({'detail': 'Role revoked.'})
+
+
+class RolesCatalogView(APIView):
+    permission_classes = [permissions.IsAuthenticated, HasRole]
+    required_roles = ['Admin']
+
+    def get(self, request):
+        roles = list(Role.objects.all().values('id', 'name', 'description'))
+        role_perms = {}
+        for rp in RolePermission.objects.select_related('role', 'permission').all():
+            role_perms.setdefault(rp.role.name, []).append(rp.permission.codename)
+        return Response({'roles': roles, 'role_permissions': role_perms})
+
+
+class MySessionsView(generics.ListAPIView):
+    """Return recent login sessions for the current user, including IP, location, and timestamps."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return UserSession.objects.filter(user=self.request.user).order_by('-login_at')
+
+    def list(self, request, *args, **kwargs):
+        # Cache user sessions for 5 minutes
+        cache_key = f'user_sessions:v1:{request.user.id}'
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
+        
+        sessions = self.get_queryset()
+        data = []
+        for s in sessions[:50]:  # cap to reasonable size
+            data.append({
+                'id': str(s.id),
+                'ip': s.ip,
+                'device_info': s.device_info,
+                'login_at': s.login_at,
+                'expires_at': s.expires_at,
+                'revoked': s.revoked,
+                'revoked_at': s.revoked_at,
+                'country': getattr(s, 'country', None),
+                'region': getattr(s, 'region', None),
+                'city': getattr(s, 'city', None),
+                'latitude': getattr(s, 'latitude', None),
+                'longitude': getattr(s, 'longitude', None),
+            })
+        
+        response_data = {'count': sessions.count(), 'results': data}
+        # Cache for 5 minutes (300 seconds)
+        cache.set(cache_key, response_data, timeout=300)
+        return Response(response_data)
+
+
+class MyActiveSessionView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # Cache active session for 2 minutes
+        cache_key = f'active_session:v1:{request.user.id}'
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
+        
+        s = UserSession.objects.filter(user=request.user, revoked=False).order_by('-login_at').first()
+        if not s:
+            return Response({'detail': 'No active session'}, status=404)
+        payload = {
+            'id': str(s.id),
+            'ip': s.ip,
+            'device_info': s.device_info,
+            'login_at': s.login_at,
+            'expires_at': s.expires_at,
+            'revoked': s.revoked,
+            'country': getattr(s, 'country', None),
+            'region': getattr(s, 'region', None),
+            'city': getattr(s, 'city', None),
+            'latitude': getattr(s, 'latitude', None),
+            'longitude': getattr(s, 'longitude', None),
+        }
+        # Cache for 2 minutes (120 seconds)
+        cache.set(cache_key, payload, timeout=120)
         return Response(payload)

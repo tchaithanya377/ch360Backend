@@ -334,6 +334,11 @@ class Student(TimeStampedUUIDModel):
         ordering = ['last_name', 'first_name']
         verbose_name = 'Student'
         verbose_name_plural = 'Students'
+        indexes = [
+            models.Index(fields=['department', 'year_of_study', 'section'], name='idx_student_dept_year_section'),
+            models.Index(fields=['academic_program', 'year_of_study'], name='idx_student_program_year'),
+            models.Index(fields=['status'], name='idx_student_status_active', condition=models.Q(status='ACTIVE')),
+        ]
         
     def __str__(self):
         return f"{self.roll_number} - {self.first_name} {self.last_name}"
