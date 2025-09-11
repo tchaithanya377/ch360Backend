@@ -142,8 +142,14 @@ class AssignmentSerializer(serializers.ModelSerializer):
     files = AssignmentFileSerializer(many=True, read_only=True)
     comments = AssignmentCommentSerializer(many=True, read_only=True)
     submissions = AssignmentSubmissionSerializer(many=True, read_only=True)
-    assigned_to_grades_names = serializers.StringRelatedField(
-        source='assigned_to_grades', many=True, read_only=True
+    assigned_to_programs_names = serializers.StringRelatedField(
+        source='assigned_to_programs', many=True, read_only=True
+    )
+    assigned_to_departments_names = serializers.StringRelatedField(
+        source='assigned_to_departments', many=True, read_only=True
+    )
+    assigned_to_course_sections_names = serializers.StringRelatedField(
+        source='assigned_to_course_sections', many=True, read_only=True
     )
     assigned_to_students_names = serializers.StringRelatedField(
         source='assigned_to_students', many=True, read_only=True
@@ -155,7 +161,10 @@ class AssignmentSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'instructions', 'category', 'category_name',
             'faculty', 'faculty_name', 'faculty_id', 'max_marks', 'due_date',
             'late_submission_allowed', 'status', 'is_group_assignment', 'max_group_size',
-            'assigned_to_grades', 'assigned_to_grades_names', 'assigned_to_students',
+            'assigned_to_programs', 'assigned_to_programs_names',
+            'assigned_to_departments', 'assigned_to_departments_names',
+            'assigned_to_course_sections', 'assigned_to_course_sections_names',
+            'assigned_to_students',
             'assigned_to_students_names', 'attachment_files', 'files', 'comments',
             'submissions', 'submission_count', 'graded_count', 'is_overdue',
             'created_at', 'updated_at'
@@ -174,7 +183,9 @@ class AssignmentCreateSerializer(serializers.ModelSerializer):
         fields = [
             'title', 'description', 'instructions', 'category', 'max_marks',
             'due_date', 'late_submission_allowed', 'is_group_assignment',
-            'max_group_size', 'assigned_to_grades', 'assigned_to_students',
+            'max_group_size',
+            'assigned_to_programs', 'assigned_to_departments', 'assigned_to_course_sections',
+            'assigned_to_students',
             'attachment_files'
         ]
     

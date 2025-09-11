@@ -166,10 +166,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         inactive_students = Student.objects.filter(status='INACTIVE').count()
         graduated_students = Student.objects.filter(status='GRADUATED').count()
         
-        # Students by grade level
-        grade_stats = {}
-        for grade, _ in Student.GRADE_CHOICES:
-            grade_stats[f'grade_{grade}'] = Student.objects.filter(grade_level=grade).count()
+        # Students by year of study
+        year_stats = {}
+        for year, _ in Student.YEAR_OF_STUDY_CHOICES:
+            count = Student.objects.filter(year_of_study=year).count()
+            if count:
+                year_stats[year] = count
         
         # Students by gender
         gender_stats = {}
@@ -181,7 +183,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             'active_students': active_students,
             'inactive_students': inactive_students,
             'graduated_students': graduated_students,
-            'grade_distribution': grade_stats,
+            'year_distribution': year_stats,
             'gender_distribution': gender_stats
         }
         
@@ -555,64 +557,27 @@ class StudentViewSet(viewsets.ModelViewSet):
         if academic_year:
             queryset = queryset.filter(academic_year=academic_year)
         
-        # Get statistics by department
-        stats = {}
-        departments = Department.objects.filter(is_active=True)
-        
-        for dept in departments:
-            dept_students = queryset.filter(department=dept)
-            if dept_students.exists():
-                # Count by year
-                year_counts = {}
-                years = dept_students.values_list('academic_year', flat=True).distinct()
-                for year in years:
-                    if year:
-                        year_students = dept_students.filter(academic_year=year)
-                        year_counts[year] = {
-                            'total': year_students.count(),
-                            'sections': {}
-                        }
-                        
-                        # Count by section
-                        sections = year_students.values_list('section', flat=True).distinct()
-                        for sec in sections:
-                            if sec:
-                                section_count = year_students.filter(section=sec).count()
-                                year_counts[year]['sections'][sec] = section_count
-                
-                # Count by year of study
-                year_counts = {}
-                for year, _ in Student.YEAR_OF_STUDY_CHOICES:
-                    count = dept_students.filter(year_of_study=year).count()
-                    if count > 0:
-                        year_counts[year] = count
-                
-                # Count by semester
-                semester_counts = {}
-                for semester, _ in Student.SEMESTER_CHOICES:
-                    count = dept_students.filter(semester=semester).count()
-                    if count > 0:
-                        semester_counts[semester] = count
-                
-                # Count by gender
-                gender_counts = {}
-                for gender, _ in Student.GENDER_CHOICES:
-                    count = dept_students.filter(gender=gender).count()
-                    if count > 0:
-                        gender_counts[gender] = count
-                
-                stats[dept.code] = {
-                    'department_id': dept.id,
-                    'department_name': dept.name,
-                    'department_code': dept.code,
-                    'total_students': dept_students.count(),
-                    'by_year': year_counts,
-                    'by_year_of_study': year_counts,
-                    'by_semester': semester_counts,
-                    'by_gender': gender_counts
-                }
-        
-        return Response(stats)
+        data = {
+            'by_department': list(
+                queryset.values('department__id','department__code','department__name')
+                        .annotate(total=Count('id'))
+                        .order_by('department__code')
+            ),
+            'by_academic_year': list(
+                queryset.values('academic_year').annotate(total=Count('id')).order_by('academic_year')
+            ),
+            'by_year_of_study': list(
+                queryset.values('year_of_study').annotate(total=Count('id')).order_by('year_of_study')
+            ),
+            'by_semester': list(
+                queryset.values('semester').annotate(total=Count('id')).order_by('semester')
+            ),
+            'by_section': list(
+                queryset.values('section').annotate(total=Count('id')).order_by('section')
+            ),
+            'total_students': queryset.count(),
+        }
+        return Response(data)
 
 
 class StudentEnrollmentHistoryViewSet(viewsets.ModelViewSet):

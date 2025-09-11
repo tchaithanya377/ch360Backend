@@ -519,7 +519,7 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if 'open_requests' in request.resolver_match.url_name %}active{% endif %}"
-                               href="{% url 'dashboard:open_requests_list' %}">
+                               href="#" class="disabled" onclick="return false;">
                                 <i class="fas fa-inbox"></i> Open Requests
                                 <span class="badge bg-info ms-2" style="font-size: 0.6rem;">NEW</span>
                             </a>
@@ -562,24 +562,22 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.resolver_match.url_name == 'schema' %}active{% endif %}" 
-                               href="{% url 'dashboard:schema' %}">
+                               href="#" class="disabled" onclick="return false;">
                                 <i class="fas fa-database"></i> Database Schema
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if 'api_testing' in request.resolver_match.url_name %}active{% endif %}" 
-                               href="{% url 'dashboard:api_testing_dashboard' %}">
+                            <a class="nav-link" href="#" class="disabled" onclick="return false;">
                                 <i class="fas fa-code"></i> API Testing
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if 'simple_api_workspace' in request.resolver_match.url_name %}active{% endif %}" 
-                               href="{% url 'dashboard:simple_api_workspace' %}">
+                            <a class="nav-link" href="#" class="disabled" onclick="return false;">
                                 <i class="fas fa-rocket"></i> Quick API Test
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'docs:home' %}" target="_blank">
+                            <a class="nav-link" href="/" target="_blank">
                                 <i class="fas fa-book-open"></i> Documentation
                                 <span class="badge bg-success ms-2">NEW</span>
                             </a>
@@ -603,8 +601,7 @@
                             {% endif %}
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'er' %}active{% endif %}" 
-                               href="{% url 'dashboard:er' %}">
+                            <a class="nav-link" href="#" class="disabled" onclick="return false;">
                                 <i class="fas fa-project-diagram"></i> ER Diagram
                             </a>
                         </li>

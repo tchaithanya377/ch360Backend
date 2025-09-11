@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 import requests
+import time
+from django_redis import get_redis_connection
 
 
 def extract_client_ip(request) -> Optional[str]:
@@ -176,3 +178,47 @@ def create_sample_audit_logs():
     except Exception as e:
         print(f"Error creating sample audit logs: {e}")
         return []
+
+
+# ------------------
+# Redis Rate Limiter
+# ------------------
+
+class RateLimitExceeded(Exception):
+    pass
+
+
+def _rl_redis():
+    try:
+        return get_redis_connection("default")
+    except Exception:
+        return None
+
+
+def rate_limit_key(scope: str, key: str) -> str:
+    return f"ratelimit:{scope}:{key}"
+
+
+def allow_request(scope: str, key: str, limit: int, window_seconds: int) -> bool:
+    r = _rl_redis()
+    if r is None:
+        return True
+    now = int(time.time())
+    bucket = now // window_seconds
+    k = f"{rate_limit_key(scope, key)}:{bucket}"
+    with r.pipeline() as p:
+        p.incr(k, 1)
+        p.expire(k, window_seconds * 2)
+        cnt, _ = p.execute()
+    return int(cnt) <= limit
+
+
+def ratelimit(scope: str, limit: int, window_seconds: int, key_func=None):
+    def decorator(view_func):
+        def _wrapped(request, *args, **kwargs):
+            rk = key_func(request) if key_func else (request.META.get('HTTP_X_FORWARDED_FOR') or request.META.get('REMOTE_ADDR') or 'unknown')
+            if not allow_request(scope, rk, limit, window_seconds):
+                raise RateLimitExceeded('rate limit exceeded')
+            return view_func(request, *args, **kwargs)
+        return _wrapped
+    return decorator

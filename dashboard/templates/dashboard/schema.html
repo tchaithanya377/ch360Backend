@@ -9,13 +9,13 @@
         Database Schema
     </h1>
     <div class="btn-toolbar mb-2 mb-md-0">
-        <a class="btn btn-success" href="{% url 'dashboard:schema_excel' %}">
-            <i class="fas fa-file-excel"></i> Download Excel
+        <a class="btn btn-success" href="{% url 'dashboard:home' %}">
+            <i class="fas fa-file-excel"></i> Download Schema (Excel)
         </a>
-        <a class="btn btn-outline-success ms-2" href="{% url 'dashboard:schema_excel_single' %}">
-            <i class="fas fa-table"></i> Download Excel (Single Sheet)
+        <a class="btn btn-outline-success ms-2" href="{% url 'dashboard:home' %}">
+            <i class="fas fa-file-excel"></i> Download Single Sheet
         </a>
-        <a class="btn btn-outline-secondary ms-2" href="{% url 'dashboard:schema_csv' %}">
+        <a class="btn btn-outline-secondary ms-2" href="{% url 'dashboard:home' %}">
             <i class="fas fa-file-csv"></i> Download CSV
         </a>
         <button class="btn btn-primary ms-2" onclick="exportSchema()">

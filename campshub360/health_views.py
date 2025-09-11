@@ -8,6 +8,7 @@ from django.db import connection
 from django.core.cache import cache
 from django.conf import settings
 import logging
+from .metrics import collect_app_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -150,3 +151,9 @@ def liveness_check(request):
         'status': 'alive',
         'message': 'Application is alive and running'
     })
+
+
+def app_metrics(request):
+    """Lightweight JSON metrics for RPS and latency percentiles."""
+    data = collect_app_metrics()
+    return JsonResponse(data)

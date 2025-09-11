@@ -1,7 +1,8 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
+import os
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count
 from django.utils import timezone
@@ -17,8 +18,11 @@ from .api_serializers import (
     StudentImportSerializer, StudentStatsSerializer
 )
 from .filters import StudentFilter
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 
 
+@method_decorator(cache_page(60 * 5), name='list')
 class StudentViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing students
@@ -44,6 +48,16 @@ class StudentViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return StudentDetailSerializer
         return StudentSerializer
+
+    def get_permissions(self):
+        """Allow anonymous read-only access for load testing if enabled via env.
+        Set ENABLE_PUBLIC_STUDENT_READS=True to bypass auth on safe read actions.
+        """
+        enable_public_reads = os.getenv('ENABLE_PUBLIC_STUDENT_READS', 'False').lower() == 'true'
+        public_actions = {'list', 'retrieve', 'search', 'stats', 'documents', 'enrollment_history'}
+        if enable_public_reads and self.action in public_actions and self.request.method == 'GET':
+            return [AllowAny()]
+        return [permission() for permission in self.permission_classes]
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
@@ -107,6 +121,87 @@ class StudentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(students, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def division_statistics(self, request):
+        """Aggregated statistics grouped by department/year/semester/section (API v1)."""
+        qs = Student.objects.all()
+
+        # Optional filters
+        dept = request.query_params.get('department')
+        if dept:
+            qs = qs.filter(department_id=dept)
+        ay = request.query_params.get('academic_year')
+        if ay:
+            qs = qs.filter(academic_year=ay)
+
+        data = {
+            'total_students': qs.count(),
+            'by_department': list(
+                qs.values('department__id','department__code','department__name')
+                  .annotate(total=Count('id'))
+                  .order_by('department__code')
+            ),
+            'by_academic_year': list(
+                qs.values('academic_year').annotate(total=Count('id')).order_by('academic_year')
+            ),
+            'by_year_of_study': list(
+                qs.values('year_of_study').annotate(total=Count('id')).order_by('year_of_study')
+            ),
+            'by_semester': list(
+                qs.values('semester').annotate(total=Count('id')).order_by('semester')
+            ),
+            'by_section': list(
+                qs.values('section').annotate(total=Count('id')).order_by('section')
+            ),
+        }
+        return Response(data)
+
+    @action(detail=False, methods=['get'])
+    def divisions(self, request):
+        """Compact divisions listing with counts (API v1)."""
+        base = Student.objects.select_related('department','academic_program')
+
+        # Filters
+        for qp, field in (
+            ('department','department_id'),
+            ('academic_program','academic_program_id'),
+            ('academic_year','academic_year'),
+            ('year_of_study','year_of_study'),
+            ('semester','semester'),
+            ('section','section'),
+        ):
+            val = request.query_params.get(qp)
+            if val:
+                base = base.filter(**{field: val})
+
+        divisions = {}
+        for row in base.values(
+            'department__code','department__name',
+            'academic_program__code','academic_program__name',
+            'academic_year','year_of_study','semester','section'
+        ).annotate(count=Count('id')):
+            dcode = row['department__code'] or 'UNASSIGNED'
+            pcode = row['academic_program__code'] or 'UNASSIGNED'
+            ay = row['academic_year'] or 'UNSET'
+            yos = row['year_of_study'] or 'UNSET'
+            sem = row['semester'] or 'UNSET'
+            sec = row['section'] or 'UNSET'
+
+            d = divisions.setdefault(dcode, {
+                'department_name': row['department__name'],
+                'programs': {}
+            })
+            p = d['programs'].setdefault(pcode, {
+                'program_name': row['academic_program__name'],
+                'years': {}
+            })
+            y = p['years'].setdefault(ay, {'year_of_study': {}})
+            ys = y['year_of_study'].setdefault(yos, {'semesters': {}})
+            se = ys['semesters'].setdefault(sem, {'sections': {}})
+            se['sections'][sec] = {'count': row['count']}
+
+        return Response(divisions)
+
     @action(detail=True, methods=['post'])
     def create_login(self, request, pk=None):
         """Manually create login account for student"""
@@ -142,7 +237,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     def enrollment_history(self, request, pk=None):
         """Get student enrollment history"""
         student = self.get_object()
-        history = StudentEnrollmentHistory.objects.only('id','grade_level','academic_year','enrollment_date','status','student_id').filter(student=student)
+        history = StudentEnrollmentHistory.objects.only('id','year_of_study','academic_year','enrollment_date','status','student_id').filter(student=student)
         serializer = StudentEnrollmentHistorySerializer(history, many=True)
         return Response(serializer.data)
 
@@ -291,9 +386,9 @@ class StudentEnrollmentHistoryViewSet(viewsets.ModelViewSet):
     serializer_class = StudentEnrollmentHistorySerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['student', 'academic_year', 'grade_level', 'status']
+    filterset_fields = ['student', 'academic_year', 'year_of_study', 'status']
     search_fields = ['student__first_name', 'student__last_name', 'student__roll_number']
-    ordering_fields = ['enrollment_date', 'academic_year', 'grade_level']
+    ordering_fields = ['enrollment_date', 'academic_year', 'year_of_study']
     ordering = ['-enrollment_date']
 
 
@@ -389,6 +484,7 @@ class StudentCustomFieldValueViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@method_decorator(cache_page(60 * 2), name='list')
 class StudentImportViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint for viewing student import history

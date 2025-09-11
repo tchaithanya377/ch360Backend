@@ -1,26 +1,4 @@
-"""
-Management command to bulk create users for performance testing
-"""
-from django.core.management.base import BaseCommand
-from django.contrib.auth import get_user_model
-from django.db import transaction
-from accounts.models import Role, UserRole
-import uuid
-
-User = get_user_model()
-
-class Command(BaseCommand):
-    help = 'Bulk create users for performance testing'
-
-    def add_arguments(self, parser):
-        parser.add_argument('--students', type=int, default=100, help='Number of students to create')
-        parser.add_argument('--faculty', type=int, default=50, help='Number of faculty to create')
-        parser.add_argument('--admins', type=int, default=10, help='Number of admins to create')
-        parser.add_argument('--password', type=str, default='TestPass123!', help='Default password for all users')
-        parser.add_argument('--role-assign', action='store_true', help='Assign roles to created users')
-
-    def handle(self, *args, **options):
-        students_count = options['students']
+"""Removed test seeding command."""
         faculty_count = options['faculty']
         admins_count = options['admins']
         password = options['password']

@@ -34,7 +34,7 @@ class CourseCreateSerializer(serializers.ModelSerializer):
         model = Course
         fields = [
             'code', 'title', 'description', 'level', 'credits',
-            'duration_weeks', 'max_students', 'prerequisites', 'faculty', 'status'
+            'duration_weeks', 'max_students', 'prerequisites', 'department', 'programs', 'status'
         ]
 
 
@@ -142,8 +142,8 @@ class TimetableCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Timetable
         fields = [
-            'course', 'timetable_type', 'academic_year', 'semester',
-            'day_of_week', 'start_time', 'end_time', 'room', 'faculty',
+            'course_section', 'timetable_type',
+            'day_of_week', 'start_time', 'end_time', 'room',
             'is_active', 'notes'
         ]
 
@@ -186,8 +186,8 @@ class CourseEnrollmentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CourseEnrollment
         fields = [
-            'student', 'course', 'academic_year', 'semester',
-            'status', 'grade', 'grade_points', 'attendance_percentage', 'notes'
+            'student', 'course_section',
+            'status', 'grade', 'grade_points', 'attendance_percentage', 'enrollment_type', 'notes'
         ]
 
 

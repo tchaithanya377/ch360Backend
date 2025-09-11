@@ -134,11 +134,12 @@ INSTALLED_APPS = [
     'transportation',
     'mentoring',
     'feedback',
-    'open_requests',
     'assignments',
-    'docs',
+    # 'docs' app removed
     'campshub360',
 ]
+
+# drf-spectacular removed
 
 # Optionally include ratelimit if installed, to avoid hard dependency during local dev
 try:
@@ -157,7 +158,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'campshub360.metrics.MetricsMiddleware',
     'campshub360.audit.AuditLogMiddleware',
+    'campshub360.db_tenant.SetCurrentDepartmentMiddleware',
 ]
 
 ROOT_URLCONF = 'campshub360.urls'
@@ -307,6 +310,8 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'campshub360.exceptions.custom_exception_handler',
 }
 
+# Schema generation removed
+
 # SimpleJWT settings (optional sane defaults)
 from datetime import timedelta
 
@@ -327,9 +332,9 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Auth redirects
-LOGIN_URL = 'dashboard:login'
-LOGIN_REDIRECT_URL = 'dashboard:home'
-LOGOUT_REDIRECT_URL = 'dashboard:login'
+LOGIN_URL = 'admin:login'
+LOGIN_REDIRECT_URL = 'admin:index'
+LOGOUT_REDIRECT_URL = 'admin:login'
 
 # Caching - Redis if available, fallback to local memory cache
 if os.getenv('REDIS_URL'):
@@ -339,6 +344,10 @@ if os.getenv('REDIS_URL'):
             'LOCATION': os.getenv('REDIS_URL'),
             'TIMEOUT': int(os.getenv('CACHE_DEFAULT_TIMEOUT', '300')),
             'OPTIONS': {
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': int(os.getenv('REDIS_MAX_CONNECTIONS', '2000')),
+                    'retry_on_timeout': True,
+                },
             }
         },
         'sessions': {
@@ -346,6 +355,10 @@ if os.getenv('REDIS_URL'):
             'LOCATION': os.getenv('REDIS_URL'),
             'TIMEOUT': int(os.getenv('SESSION_CACHE_TIMEOUT', '86400')),  # 24 hours
             'OPTIONS': {
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': int(os.getenv('REDIS_MAX_CONNECTIONS', '2000')),
+                    'retry_on_timeout': True,
+                },
             }
         },
         'query_cache': {
@@ -353,6 +366,10 @@ if os.getenv('REDIS_URL'):
             'LOCATION': os.getenv('REDIS_URL'),
             'TIMEOUT': int(os.getenv('QUERY_CACHE_TIMEOUT', '600')),  # 10 minutes
             'OPTIONS': {
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': int(os.getenv('REDIS_MAX_CONNECTIONS', '2000')),
+                    'retry_on_timeout': True,
+                },
             }
         }
     }
@@ -424,6 +441,9 @@ if DATABASES['default']['ENGINE'].endswith('postgresql'):
     DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
     if 'read_replica' in DATABASES:
         DATABASES['read_replica']['CONN_MAX_AGE'] = 600
+
+# Optional: route reads to replica
+DATABASE_ROUTERS = ['campshub360.db_routers.ReadReplicaRouter']
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = os.getenv(

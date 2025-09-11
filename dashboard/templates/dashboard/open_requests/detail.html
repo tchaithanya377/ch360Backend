@@ -6,7 +6,7 @@
     <h2 class="mb-0">Request #{{ item.id }}</h2>
     <div class="text-muted">Created {{ item.created_at|date:'Y-m-d H:i' }} by {{ item.created_by }}</div>
   </div>
-  <a href="{% url 'dashboard:open_requests_list' %}" class="btn btn-outline-secondary">Back</a>
+  <a href="{% url 'dashboard:home' %}" class="btn btn-outline-secondary">Back</a>
  </div>
 
 {% if messages %}

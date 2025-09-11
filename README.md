@@ -212,6 +212,99 @@ docker-compose -f docker-compose.production.yml up -d
 - **`AWS-EC2-CONNECT-GUIDE.md`** - Complete EC2 Instance Connect guide
 - **`DOCKER-SUMMARY.md`** - Quick reference and overview
 
+## 🔐 Database Ops: Pooling, Auditing, RLS, Backups
+
+### pgBouncer (transaction pooling)
+
+1) Install pgBouncer near Postgres (same VPC/subnet). Example `/etc/pgbouncer/pgbouncer.ini`:
+```ini
+[databases]
+campushub360 = host=<rds-host> port=5432 dbname=campushub360 user=campushub password=<secret> sslmode=require
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+pool_mode = transaction
+max_client_conn = 10000
+default_pool_size = 100
+min_pool_size = 20
+reserve_pool_size = 50
+server_reset_query = DISCARD ALL
+ignore_startup_parameters = extra_float_digits
+``` 
+
+2) App configuration:
+- Set `DATABASE_URL=postgres://campushub:<secret>@<pgbouncer-host>:6432/campushub360`
+- When using transaction pooling set `CONN_MAX_AGE=0`
+- Health check: `psql -h <pgbouncer-host> -p 6432 -U campushub -c "SHOW POOLS;"`
+
+### pg_stat_statements and pgaudit
+
+On RDS, update the Parameter Group:
+- `shared_preload_libraries = 'pg_stat_statements,pgaudit'`
+- `pg_stat_statements.track = all`
+- `pg_stat_statements.max = 10000`
+- `pgaudit.log = 'read, write, ddl, role'`
+- `pgaudit.log_parameter = on`
+
+Then connect and run:
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+-- Top slow queries
+SELECT query, mean_time, calls, total_time
+FROM pg_stat_statements
+ORDER BY mean_time DESC
+LIMIT 20;
+```
+
+### TLS, SCRAM, and password rotation
+
+```sql
+ALTER SYSTEM SET password_encryption='scram-sha-256';
+SELECT pg_reload_conf();
+ALTER ROLE campushub WITH ENCRYPTED PASSWORD '<new-strong-password>';
+```
+Rotate `POSTGRES_PASSWORD`, Django `SECRET_KEY`, and JWT keys on a fixed cadence.
+
+### Least-privilege roles
+
+```sql
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+GRANT USAGE ON SCHEMA public TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user;
+```
+
+### Backups and WAL shipping (self-managed)
+
+Using WAL-G to S3:
+```bash
+export WALG_S3_PREFIX=s3://your-bucket/pg
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+
+wal-g backup-push /var/lib/postgresql/data
+wal-g backup-list
+
+# PITR example
+wal-g backup-fetch /var/lib/postgresql/data LATEST
+```
+
+If using RDS: enable automated backups + PITR. Schedule a quarterly restore drill and run app integrity checks.
+
+### Row Level Security (RLS) example
+
+Add tenant or department column where needed, then:
+```sql
+ALTER TABLE students_student ENABLE ROW LEVEL SECURITY;
+CREATE POLICY dept_read_policy ON students_student
+  FOR SELECT USING (department_id = current_setting('app.current_department')::uuid);
+```
+Set `SET LOCAL app.current_department = '<uuid>'` per request via middleware/DB router when needed.
+
 ## 🎉 **Success!**
 
 Your CampsHub360 application is now ready for production with 20k+ users per second capacity!

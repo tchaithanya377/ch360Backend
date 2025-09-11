@@ -1,3 +1,18 @@
+## Scale and Security Playbook
+
+This folder documents and scripts the production hardening steps:
+
+- pgBouncer configuration and `DATABASE_URL` changeover
+- Partitioning and high-value indexes
+- pg_stat_statements setup and slow query exports
+- Postgres TLS + SCRAM and secret rotation
+- pgaudit configuration and central logging
+- Backups + WAL shipping + restore test
+- Row Level Security (RLS) policies
+- Monitoring and alerts (Prometheus/Grafana/Sentry)
+
+See individual documents for commands and configuration examples.
+
 # 📚 CampusHub360 Documentation
 
 ## 🚀 **Quick Start**

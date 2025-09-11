@@ -85,3 +85,7 @@ Notes
 - UUIDs are used for primary keys in most resources.
 - Case-insensitive unique constraints on emails/identifiers prevent duplicates.
 - For high throughput, prefer bulk endpoints where available and minimize N+1 calls.
+
+Health & Metrics
+- GET `/health/`, `/health/detailed/`, `/health/ready/`, `/health/alive/`
+- GET `/metrics/app` – application RPS and request/DB latency percentiles

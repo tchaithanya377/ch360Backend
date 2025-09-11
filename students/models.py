@@ -1,5 +1,9 @@
 import uuid
 from django.db import models
+try:
+    from django.contrib.postgres.indexes import GinIndex
+except Exception:
+    GinIndex = None  # type: ignore
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.validators import RegexValidator
@@ -338,6 +342,8 @@ class Student(TimeStampedUUIDModel):
             models.Index(fields=['department', 'year_of_study', 'section'], name='idx_student_dept_year_section'),
             models.Index(fields=['academic_program', 'year_of_study'], name='idx_student_program_year'),
             models.Index(fields=['status'], name='idx_student_status_active', condition=models.Q(status='ACTIVE')),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['updated_at']),
         ]
         
     def __str__(self):
@@ -524,6 +530,9 @@ class StudentDocument(TimeStampedUUIDModel):
         ordering = ['-created_at']
         verbose_name = 'Student Document'
         verbose_name_plural = 'Student Documents'
+        indexes = [
+            models.Index(fields=['document_type', 'student']),
+        ]
     
     def __str__(self):
         return f"{self.student.full_name} - {self.title}"

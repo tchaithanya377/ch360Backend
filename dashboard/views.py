@@ -20,7 +20,10 @@ from django.db.models import Q, Count
 import csv
 import os
 
-from .models import APICollection, APIEnvironment, APIRequest, APITest, APITestResult, APITestSuite, APITestSuiteResult, APIAutomation
+try:
+    from .models import APICollection, APIEnvironment, APIRequest, APITest, APITestResult, APITestSuite, APITestSuiteResult, APIAutomation
+except Exception:  # Models were removed; provide dummies for view compatibility
+    APICollection = APIEnvironment = APIRequest = APITest = APITestResult = APITestSuite = APITestSuiteResult = APIAutomation = None
 from academics.models import Course, Syllabus, Timetable, CourseEnrollment, AcademicCalendar, AcademicProgram, CourseSection
 from departments.models import Department
 from attendance.models import AttendanceSession, AttendanceRecord
@@ -4635,117 +4638,43 @@ def fees_api_endpoints(request):
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from open_requests.models import OpenRequest, RequestTarget
+try:
+    from open_requests.models import OpenRequest, RequestTarget
+except Exception:
+    OpenRequest = RequestTarget = None
 
 
 @login_required
 def open_requests_list(request):
-    target = request.GET.get('target')
-    status_filter = request.GET.get('status')
-    priority = request.GET.get('priority')
+    if OpenRequest is None:
+        return redirect('dashboard:home')
     queryset = OpenRequest.objects.select_related('created_by', 'assignee').all()
-
-    if target in dict(RequestTarget.choices):
-        queryset = queryset.filter(target=target)
-    if status_filter in {'open', 'in_progress', 'resolved', 'closed'}:
-        queryset = queryset.filter(status=status_filter)
-    if priority in {'low', 'medium', 'high', 'urgent'}:
-        queryset = queryset.filter(priority=priority)
-
-    context = {
-        'requests_list': queryset[:200],
-        'target': target,
-        'status_filter': status_filter,
-        'priority': priority,
-        'targets': RequestTarget.choices,
-    }
-    return render(request, 'dashboard/open_requests/list.html', context)
+    paginator = Paginator(queryset, 20)
+    page = request.GET.get('page')
+    items = paginator.get_page(page)
+    return render(request, 'dashboard/open_requests/list.html', {'items': items})
 
 
 @login_required
 def open_request_create(request):
+    if OpenRequest is None:
+        return redirect('dashboard:home')
     if request.method == 'POST':
-        title = request.POST.get('title', '').strip()
-        description = request.POST.get('description', '').strip()
-        target = request.POST.get('target')
-
-        if not title:
-            messages.error(request, 'Title is required.')
-        elif target not in dict(RequestTarget.choices):
-            messages.error(request, 'Please choose a valid target.')
-        else:
-            OpenRequest.objects.create(
-                title=title,
-                description=description,
-                target=target,
-                created_by=request.user,
-            )
-            messages.success(request, 'Request created successfully.')
-            return redirect('dashboard:open_requests_list')
-
-    context = {
-        'targets': RequestTarget.choices,
-    }
-    return render(request, 'dashboard/open_requests/create.html', context)
+        OpenRequest.objects.create(
+            title=request.POST.get('title',''),
+            description=request.POST.get('description',''),
+            created_by=request.user,
+        )
+        return redirect('dashboard:open_requests_list')
+    return render(request, 'dashboard/open_requests/create.html')
 
 
 @login_required
-def open_request_detail(request, request_id: int):
+def open_request_detail(request, request_id):
+    if OpenRequest is None:
+        return redirect('dashboard:home')
     item = get_object_or_404(OpenRequest, id=request_id)
-
-    if request.method == 'POST':
-        action = request.POST.get('action')
-        if action == 'toggle_resolved':
-            item.is_resolved = not item.is_resolved
-            item.save(update_fields=['is_resolved', 'updated_at'])
-            messages.success(request, 'Status updated.')
-            return redirect('dashboard:open_request_detail', request_id=item.id)
-        elif action == 'update':
-            title = request.POST.get('title', '').strip()
-            description = request.POST.get('description', '').strip()
-            target = request.POST.get('target')
-            status_val = request.POST.get('status')
-            priority_val = request.POST.get('priority')
-            due_date_val = request.POST.get('due_date')
-            assignee_input = request.POST.get('assignee', '').strip()
-            if not title:
-                messages.error(request, 'Title is required.')
-            elif target not in dict(RequestTarget.choices):
-                messages.error(request, 'Please choose a valid target.')
-            else:
-                item.title = title
-                item.description = description
-                item.target = target
-                if status_val in {'open', 'in_progress', 'resolved', 'closed'}:
-                    item.status = status_val
-                if priority_val in {'low', 'medium', 'high', 'urgent'}:
-                    item.priority = priority_val
-                if due_date_val:
-                    item.due_date = due_date_val
-                # Resolve assignee by username or email
-                if assignee_input:
-                    from django.contrib.auth import get_user_model
-                    User = get_user_model()
-                    item.assignee = User.objects.filter(username=assignee_input).first() or \
-                                     User.objects.filter(email=assignee_input).first()
-                else:
-                    item.assignee = None
-                item.save()
-                messages.success(request, 'Request updated.')
-                return redirect('dashboard:open_request_detail', request_id=item.id)
-        elif action == 'add_comment':
-            content = request.POST.get('comment', '').strip()
-            if content:
-                from open_requests.models import RequestComment
-                RequestComment.objects.create(request=item, author=request.user, content=content)
-                messages.success(request, 'Comment added.')
-            return redirect('dashboard:open_request_detail', request_id=item.id)
-
-    context = {
-        'item': item,
-        'targets': RequestTarget.choices,
-    }
-    return render(request, 'dashboard/open_requests/detail.html', context)
+    return render(request, 'dashboard/open_requests/detail.html', {'item': item})
 
 
 def custom_logout(request):

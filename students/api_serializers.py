@@ -73,8 +73,8 @@ class StudentEnrollmentHistorySerializer(serializers.ModelSerializer):
         model = StudentEnrollmentHistory
         fields = [
             'id', 'student', 'student_name', 'student_roll_number',
-            'academic_year', 'year_of_study', 'semester', 'section', 'enrollment_date',
-            'status', 'remarks', 'created_at', 'updated_at'
+            'academic_year', 'year_of_study', 'semester', 'enrollment_date',
+            'status', 'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 

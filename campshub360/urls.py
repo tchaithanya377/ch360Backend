@@ -24,7 +24,8 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 from accounts.views import RateLimitedTokenView, RateLimitedRefreshView
-from .health_views import health_check, detailed_health_check, readiness_check, liveness_check
+from .health_views import health_check, detailed_health_check, readiness_check, liveness_check, app_metrics
+# drf-spectacular imports removed
 
 urlpatterns = [
     # Health check endpoints
@@ -32,6 +33,7 @@ urlpatterns = [
     path('health/detailed/', detailed_health_check, name='detailed_health_check'),
     path('health/ready/', readiness_check, name='readiness_check'),
     path('health/alive/', liveness_check, name='liveness_check'),
+    path('metrics/app', app_metrics, name='app_metrics'),
     
     path('admin/', admin.site.urls),
     # Standardized JWT endpoints (rate limited)
@@ -52,14 +54,21 @@ urlpatterns = [
     path('api/v1/transport/', include('transportation.urls', namespace='transportation')),
     path('api/v1/mentoring/', include('mentoring.urls', namespace='mentoring')),
     path('api/v1/feedback/', include('feedback.urls', namespace='feedback')),
-    path('api/v1/open-requests/', include('open_requests.urls', namespace='open_requests')),
     path('api/v1/assignments/', include('assignments.urls', namespace='assignments')),
-    path('docs/', include('docs.urls', namespace='docs')),
+    # Prometheus metrics (conditionally added below if installed)
+    # Docs and API schema routes removed
     path('facilities/', include('facilities.urls', namespace='facilities_dashboard')),
     path('dashboard/', include('dashboard.urls', namespace='dashboard')),
     path('students/', include('students.urls', namespace='students')),
     path('', RedirectView.as_view(pattern_name='dashboard:login', permanent=False)),
 ]
+
+# Conditionally add Prometheus metrics if app is installed
+try:
+    import django_prometheus  # noqa: F401
+    urlpatterns = [path('', include('django_prometheus.urls'))] + urlpatterns
+except Exception:
+    pass
 
 # Serve static files during development
 if settings.DEBUG:

@@ -5,6 +5,11 @@ from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 from django.db.models import Q, UniqueConstraint, Index
+from django.db.models.functions import Lower
+try:
+    from django.contrib.postgres.indexes import GinIndex
+except Exception:  # pragma: no cover - optional import for non-Postgres envs
+    GinIndex = None  # type: ignore
 from django.utils import timezone
 
 
@@ -58,6 +63,13 @@ class User(TimeStampedUUIDModel, AbstractBaseUser, PermissionsMixin):
 
     def __str__(self) -> str:  # pragma: no cover - convenience
         return self.email
+    class Meta:
+        constraints = [
+            UniqueConstraint(Lower('email'), name='uniq_accounts_user_email_lower'),
+        ]
+        indexes = [
+            Index(fields=['is_active']),
+        ]
 
 
 class Role(TimeStampedUUIDModel):
@@ -82,6 +94,9 @@ class RolePermission(TimeStampedUUIDModel):
 
     class Meta:
         unique_together = ('role', 'permission')
+        indexes = [
+            Index(fields=['role', 'permission']),
+        ]
 
 
 class UserRole(TimeStampedUUIDModel):
@@ -94,6 +109,9 @@ class UserRole(TimeStampedUUIDModel):
 
     class Meta:
         unique_together = ('user', 'role')
+        indexes = [
+            Index(fields=['user', 'role']),
+        ]
 
 
 class IdentifierType(models.TextChoices):
@@ -184,5 +202,11 @@ class AuditLog(TimeStampedUUIDModel):
     ip = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)
     meta = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        indexes = [
+            Index(fields=['created_at']),
+            Index(fields=['user', 'created_at']),
+        ] + ([GinIndex(fields=['meta'])] if GinIndex else [])
 
 

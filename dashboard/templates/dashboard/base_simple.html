@@ -204,9 +204,9 @@
                         <span class="badge bg-primary ms-2">NEW</span>
                     </a>
                 </li>
+                <!-- Open Requests route disabled when app not installed -->
                 <li class="nav-item">
-                    <a class="nav-link text-white {% if 'open_requests' in request.resolver_match.url_name %}bg-white bg-opacity-25{% endif %}"
-                       href="{% url 'dashboard:open_requests_list' %}">
+                    <a class="nav-link text-white disabled" href="#" onclick="return false;">
                         <i class="fas fa-inbox me-2"></i> Open Requests
                         <span class="badge bg-info ms-2">NEW</span>
                     </a>
@@ -248,20 +248,17 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link text-white {% if request.resolver_match.url_name == 'schema' %}bg-white bg-opacity-25{% endif %}" 
-                       href="{% url 'dashboard:schema' %}">
+                    <a class="nav-link text-white disabled" href="#" onclick="return false;">
                         <i class="fas fa-database me-2"></i> Database Schema
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link text-white {% if 'api_testing' in request.resolver_match.url_name %}bg-white bg-opacity-25{% endif %}" 
-                       href="{% url 'dashboard:api_testing_dashboard' %}">
+                    <a class="nav-link text-white disabled" href="#" onclick="return false;">
                         <i class="fas fa-code me-2"></i> API Testing
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link text-white {% if 'simple_api_workspace' in request.resolver_match.url_name %}bg-white bg-opacity-25{% endif %}" 
-                       href="{% url 'dashboard:simple_api_workspace' %}">
+                    <a class="nav-link text-white disabled" href="#" onclick="return false;">
                         <i class="fas fa-rocket me-2"></i> Quick API Test
                     </a>
                 </li>
@@ -284,8 +281,7 @@
                     {% endif %}
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link text-white {% if request.resolver_match.url_name == 'er' %}bg-white bg-opacity-25{% endif %}" 
-                       href="{% url 'dashboard:er' %}">
+                    <a class="nav-link text-white disabled" href="#" onclick="return false;">
                         <i class="fas fa-project-diagram me-2"></i> ER Diagram
                     </a>
                 </li>

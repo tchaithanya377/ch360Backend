@@ -67,6 +67,14 @@ urlpatterns = [
     path('students/search/', 
          StudentViewSet.as_view({'get': 'search'}), 
          name='student-search'),
+
+    # Division statistics and divisions (API v1)
+    path('students/division-statistics/',
+         StudentViewSet.as_view({'get': 'division_statistics'}),
+         name='student-division-statistics'),
+    path('students/divisions/',
+         StudentViewSet.as_view({'get': 'divisions'}),
+         name='student-divisions'),
     
     # Custom field types
     path('custom-fields/types/', 

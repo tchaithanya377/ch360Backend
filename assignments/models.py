@@ -141,6 +141,7 @@ class Assignment(TimeStampedUUIDModel):
             models.Index(fields=['faculty', 'status']),
             models.Index(fields=['due_date']),
             models.Index(fields=['status', 'due_date']),
+            models.Index(fields=['academic_year', 'semester']),
         ]
     
     def __str__(self):
@@ -233,6 +234,7 @@ class AssignmentSubmission(TimeStampedUUIDModel):
             models.Index(fields=['assignment', 'student']),
             models.Index(fields=['submission_date']),
             models.Index(fields=['status']),
+            models.Index(fields=['assignment', 'status', 'submission_date']),
         ]
     
     def __str__(self):

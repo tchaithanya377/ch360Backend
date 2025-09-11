@@ -1,6 +1,7 @@
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
 from . import views
+from django.views.generic import TemplateView
 
 app_name = 'dashboard'
 
@@ -10,16 +11,17 @@ urlpatterns = [
     path('logout/', views.custom_logout, name='logout'),
 
     # Dashboard pages
-    path('', views.dashboard_home, name='home'),
+    path('', TemplateView.as_view(template_name='dashboard/home.html'), name='home'),
     path('users/', views.users_list, name='users'),
     path('roles/', views.roles_list, name='roles'),
     path('sessions/', views.sessions_list, name='sessions'),
     path('audit/', views.audit_logs, name='audit'),
-    path('schema/', views.database_schema, name='schema'),
-    path('schema/excel/', views.download_schema_excel, name='schema_excel'),
-    path('schema/excel-single/', views.download_schema_excel_single, name='schema_excel_single'),
-    path('schema/csv/', views.download_schema_csv, name='schema_csv'),
-    path('er/', views.er_diagram_page, name='er'),
+    # Schema pages (disable if heavy or missing)
+    # path('schema/', views.database_schema, name='schema'),
+    # path('schema/excel/', views.download_schema_excel, name='schema_excel'),
+    # path('schema/excel-single/', views.download_schema_excel_single, name='schema_excel_single'),
+    # path('schema/csv/', views.download_schema_csv, name='schema_csv'),
+    # path('er/', views.er_diagram_page, name='er'),
     
     # Student Management
     path('students/', views.students_list, name='students'),
@@ -61,9 +63,7 @@ urlpatterns = [
     path('academics/calendar/', views.academics_calendar_list, name='academics_calendar'),
     path('academics/calendar/<int:event_id>/', views.academics_calendar_detail, name='academics_calendar_detail'),
     
-    # Academics API Endpoints
-    path('academics/api/', views.academics_api_endpoints, name='academics_api_endpoints'),
-    path('academics/api/test/', views.academics_api_test, name='academics_api_test'),
+    # Academics API Endpoints (removed)
     
     # Facilities Management
     path('facilities/', views.facilities_dashboard, name='facilities_dashboard'),
@@ -95,13 +95,7 @@ urlpatterns = [
     path('attendance/sessions/<int:session_id>/mark/', views.attendance_mark, name='attendance_mark'),
     path('attendance/generate/', views.attendance_generate_sessions, name='attendance_generate_sessions'),
     
-    # API endpoints
-    path('api/schema/', views.api_database_schema, name='api_schema'),
-    path('api/table/<str:table_name>/', views.api_table_data, name='api_table_data'),
-    path('api/stats/', views.api_dashboard_stats, name='api_stats'),
-    path('api/models/', views.api_models_info, name='api_models'),
-    path('api/er/', views.api_er_diagram, name='api_er'),
-    path('test-openpyxl/', views.test_openpyxl, name='test_openpyxl'),
+    # API dashboard endpoints (removed)
     
     # Exam Management
     path('exams/', views.exams_dashboard, name='exams_dashboard'),
@@ -151,33 +145,7 @@ urlpatterns = [
     path('mentoring/meetings/', views.mentoring_meetings, name='mentoring_meetings'),
     path('mentoring/feedback/', views.mentoring_feedback, name='mentoring_feedback'),
     
-    # API Testing
-    
-    # API Testing Dashboard Pages
-    path('api-testing-dashboard/', views.api_testing_dashboard, name='api_testing_dashboard'),
-    path('api-testing/collections/', views.api_collections_list, name='api_collections_list'),
-    path('api-testing/collections/<uuid:collection_id>/', views.api_collection_detail, name='api_collection_detail'),
-    path('api-testing/collections/<uuid:collection_id>/detail/', views.api_collection_detail_view, name='api_collection_detail_view'),
-    path('api-testing/collections/<uuid:collection_id>/update/', views.api_collection_update_view, name='api_collection_update_view'),
-    path('api-testing/collections/<uuid:collection_id>/duplicate/', views.api_collection_duplicate_view, name='api_collection_duplicate_view'),
-    path('api-testing/collections/<uuid:collection_id>/delete/', views.api_collection_delete_view, name='api_collection_delete_view'),
-    path('api-testing/environments/', views.api_environments_list, name='api_environments_list'),
-    path('api-testing/environments/<uuid:environment_id>/detail/', views.api_environment_detail_view, name='api_environment_detail_view'),
-    path('api-testing/environments/<uuid:environment_id>/update/', views.api_environment_update_view, name='api_environment_update_view'),
-    path('api-testing/environments/<uuid:environment_id>/duplicate/', views.api_environment_duplicate_view, name='api_environment_duplicate_view'),
-    path('api-testing/environments/<uuid:environment_id>/set-default/', views.api_environment_set_default_view, name='api_environment_set_default_view'),
-    path('api-testing/environments/<uuid:environment_id>/delete/', views.api_environment_delete_view, name='api_environment_delete_view'),
-    path('api-testing/requests/', views.api_requests_list, name='api_requests_list'),
-    path('api-testing/requests/<uuid:request_id>/', views.api_request_detail, name='api_request_detail'),
-    path('api-testing/tests/', views.api_tests_list, name='api_tests_list'),
-    path('api-testing/tests/<uuid:test_id>/', views.api_test_detail, name='api_test_detail'),
-    path('api-testing/test-results/', views.api_test_results_list, name='api_test_results_list'),
-    path('api-testing/test-suites/', views.api_test_suites_list, name='api_test_suites_list'),
-    path('api-testing/test-suites/<uuid:suite_id>/', views.api_test_suite_detail, name='api_test_suite_detail'),
-    path('api-testing/automations/', views.api_automations_list, name='api_automations_list'),
-    path('api-testing/automations/<uuid:automation_id>/', views.api_automation_detail, name='api_automation_detail'),
-    path('api-testing/workspace/', views.api_testing_workspace, name='api_testing_workspace'),
-    path('api-testing/simple/', views.simple_api_workspace, name='simple_api_workspace'),
+    # API Testing dashboard routes (removed)
 
     # Placements Dashboard
     path('placements/', views.placements_dashboard, name='placements_dashboard'),
@@ -234,9 +202,7 @@ urlpatterns = [
     path('feedback/items/<int:item_id>/', views.feedback_item_detail, name='feedback_item_detail'),
 
     # Open Requests (UI)
-    path('open-requests/', views.open_requests_list, name='open_requests_list'),
-    path('open-requests/create/', views.open_request_create, name='open_request_create'),
-    path('open-requests/<int:request_id>/', views.open_request_detail, name='open_request_detail'),
+    # Open Requests removed
     
     # Assignments Management
     path('assignments/', views.assignments_dashboard, name='assignments_dashboard'),
