@@ -5,6 +5,7 @@ from django.http import HttpRequest
 from rest_framework.views import exception_handler as drf_exception_handler
 from rest_framework.response import Response
 from rest_framework import status
+from accounts.utils import RateLimitExceeded
 
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,10 @@ def custom_exception_handler(exc, context) -> Optional[Response]:
 
     Ensures 500s are logged with request context and returns a stable JSON shape.
     """
+    # Custom: rate-limit to 429
+    if isinstance(exc, RateLimitExceeded):
+        return Response({'detail': 'Too Many Requests'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
     response = drf_exception_handler(exc, context)
 
     request: Optional[HttpRequest] = context.get('request')

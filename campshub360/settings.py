@@ -160,7 +160,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'campshub360.metrics.MetricsMiddleware',
     'campshub360.audit.AuditLogMiddleware',
-    'campshub360.db_tenant.SetCurrentDepartmentMiddleware',
+    # Enable RLS middleware only when ENABLE_RLS=true
+    *(['campshub360.db_tenant.SetCurrentDepartmentMiddleware'] if os.getenv('ENABLE_RLS', 'False').lower() == 'true' else []),
 ]
 
 ROOT_URLCONF = 'campshub360.urls'
