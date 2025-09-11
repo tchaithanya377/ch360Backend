@@ -7,7 +7,82 @@
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8000" },
-    { "key": "jwt", "value": "" }
+    { "key": "username", "value": "admin@example.com" },
+    { "key": "password", "value": "admin123" },
+    { "key": "jwt", "value": "" },
+    { "key": "refresh", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [ { "key": "token", "value": "{{jwt}}", "type": "string" } ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "(function() {",
+          "  const coll = pm.collectionVariables;",
+          "  const env = pm.environment;",
+          "  const baseUrl = env.get('baseUrl') || coll.get('baseUrl');",
+          "  const username = env.get('username') || coll.get('username');",
+          "  const password = env.get('password') || coll.get('password');",
+          "  function isExpired(token) {",
+          "    if (!token) return true;",
+          "    try {",
+          "      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));",
+          "      if (!payload.exp) return false;",
+          "      const now = Math.floor(Date.now() / 1000);",
+          "      return payload.exp <= now + 10;",
+          "    } catch(e) { return true; }",
+          "  }",
+          "  function setTokens(json) {",
+          "    if (json && json.access) coll.set('jwt', json.access);",
+          "    if (json && json.refresh) coll.set('refresh', json.refresh);",
+          "  }",
+          "  const current = coll.get('jwt');",
+          "  if (!current || isExpired(current)) {",
+          "    const refresh = coll.get('refresh');",
+          "    if (refresh) {",
+          "      pm.sendRequest({",
+          "        url: baseUrl + '/api/auth/token/refresh/',",
+          "        method: 'POST',",
+          "        header: { 'Content-Type': 'application/json' },",
+          "        body: { mode: 'raw', raw: JSON.stringify({ refresh }) }",
+          "      }, function(err, res) {",
+          "        if (!err && res && res.code === 200) {",
+          "          try { setTokens(res.json()); } catch(e) {}",
+          "        } else if (username && password) {",
+          "          pm.sendRequest({",
+          "            url: baseUrl + '/api/auth/token/',",
+          "            method: 'POST',",
+          "            header: { 'Content-Type': 'application/json' },",
+          "            body: { mode: 'raw', raw: JSON.stringify({ username, password }) }",
+          "          }, function(err2, res2) {",
+          "            if (!err2 && res2 && res2.code === 200) {",
+          "              try { setTokens(res2.json()); } catch(e) {}",
+          "            }",
+          "          });",
+          "        }",
+          "      });",
+          "    } else if (username && password) {",
+          "      pm.sendRequest({",
+          "        url: baseUrl + '/api/auth/token/',",
+          "        method: 'POST',",
+          "        header: { 'Content-Type': 'application/json' },",
+          "        body: { mode: 'raw', raw: JSON.stringify({ username, password }) }",
+          "      }, function(err, res) {",
+          "        if (!err && res && res.code === 200) {",
+          "          try { setTokens(res.json()); } catch(e) {}",
+          "        }",
+          "      });",
+          "    }",
+          "  }",
+          "})();"
+        ]
+      }
+    }
   ],
   "item": [
     {
@@ -23,7 +98,23 @@
               "mode": "raw",
               "raw": "{\n  \"username\": \"admin@example.com\",\n  \"password\": \"admin123\"\n}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Got tokens', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('access');",
+                  "  pm.collectionVariables.set('jwt', json.access);",
+                  "  if (json.refresh) pm.collectionVariables.set('refresh', json.refresh);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Refresh JWT",
