@@ -254,7 +254,7 @@ class Faculty(TimeStampedUUIDModel):
             user = User.objects.create_user(
                 username=username,
                 email=self.email,
-                password='CampusHub@360',  # Default password
+                password='Campus@360',  # Default password
                 is_active=True,
                 is_staff=True,
             )

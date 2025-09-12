@@ -139,7 +139,7 @@ class FacultyAdmin(admin.ModelAdmin):
         count = 0
         for faculty in queryset:
             if faculty.user:
-                faculty.user.set_password('CampusHub@360')
+                faculty.user.set_password('Campus@360')
                 faculty.user.save()
                 count += 1
         self.message_user(request, f'Successfully reset passwords for {count} faculty members.')
