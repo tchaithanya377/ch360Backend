@@ -33,8 +33,23 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    groups = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'is_active', 'is_verified', 'date_joined']
+        fields = ['id', 'username', 'email', 'is_active', 'is_verified', 'date_joined', 'groups', 'permissions']
+
+    def get_groups(self, obj):
+        try:
+            return list(obj.groups.values_list('name', flat=True))
+        except Exception:
+            return []
+
+    def get_permissions(self, obj):
+        try:
+            return sorted(list(obj.get_all_permissions()))
+        except Exception:
+            return []
 
 

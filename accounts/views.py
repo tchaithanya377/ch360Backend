@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
 from django.db.models import Q
-from .models import AuthIdentifier, IdentifierType, Role, Permission as CustomPermission, RolePermission, UserRole
+from .models import AuthIdentifier, IdentifierType
 from .models import UserSession
 from django.contrib.auth.models import Group
 from django.core.cache import cache
@@ -184,19 +184,10 @@ class RolesPermissionsView(APIView):
         if cached:
             return Response(cached)
 
-        # Custom roles via UserRole
-        roles = list(
-            UserRole.objects.filter(user=request.user)
-            .select_related('role')
-            .values_list('role__name', flat=True)
-        )
-        # Custom permissions via RolePermission
-        perms = list(
-            RolePermission.objects.filter(role__role_users__user=request.user)
-            .select_related('permission')
-            .values_list('permission__codename', flat=True)
-            .distinct()
-        )
+        # Django Groups as roles
+        roles = list(request.user.groups.values_list('name', flat=True))
+        # Django permissions including group + user perms as app_label.codename
+        perms = sorted(list(request.user.get_all_permissions()))
         payload = {'roles': sorted(roles), 'permissions': sorted(perms)}
         # Cache for 1 hour (3600 seconds) for better performance
         cache.set(cache_key, payload, timeout=3600)
@@ -244,10 +235,10 @@ class AssignRoleView(APIView):
             return Response({'detail': 'user_id and role are required.'}, status=400)
         try:
             target_user = User.objects.get(id=user_id)
-            role = Role.objects.get(name=role_name)
-        except (User.DoesNotExist, Role.DoesNotExist):
-            return Response({'detail': 'User or Role not found.'}, status=404)
-        UserRole.objects.get_or_create(user=target_user, role=role, defaults={'assigned_by': request.user})
+            group, _ = Group.objects.get_or_create(name=role_name)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=404)
+        target_user.groups.add(group)
         # Invalidate cached roles/permissions for the target user
         cache.delete(f"rolesperms:v2:{target_user.id}")
         return Response({'detail': 'Role assigned.'})
@@ -264,10 +255,12 @@ class RevokeRoleView(APIView):
             return Response({'detail': 'user_id and role are required.'}, status=400)
         try:
             target_user = User.objects.get(id=user_id)
-            role = Role.objects.get(name=role_name)
-        except (User.DoesNotExist, Role.DoesNotExist):
-            return Response({'detail': 'User or Role not found.'}, status=404)
-        UserRole.objects.filter(user=target_user, role=role).delete()
+            group = Group.objects.get(name=role_name)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=404)
+        except Group.DoesNotExist:
+            return Response({'detail': 'Role not found.'}, status=404)
+        target_user.groups.remove(group)
         cache.delete(f"rolesperms:v2:{target_user.id}")
         return Response({'detail': 'Role revoked.'})
 
@@ -277,11 +270,14 @@ class RolesCatalogView(APIView):
     required_roles = ['Admin']
 
     def get(self, request):
-        roles = list(Role.objects.all().values('id', 'name', 'description'))
+        # Expose Django Groups and their assigned permissions (codenames with app label)
+        groups = []
         role_perms = {}
-        for rp in RolePermission.objects.select_related('role', 'permission').all():
-            role_perms.setdefault(rp.role.name, []).append(rp.permission.codename)
-        return Response({'roles': roles, 'role_permissions': role_perms})
+        for g in Group.objects.all().order_by('name'):
+            groups.append({'id': g.id, 'name': g.name})
+            perms = g.permissions.select_related('content_type').all()
+            role_perms[g.name] = [f"{p.content_type.app_label}.{p.codename}" for p in perms]
+        return Response({'roles': groups, 'role_permissions': role_perms})
 
 
 class MySessionsView(generics.ListAPIView):

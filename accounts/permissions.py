@@ -3,7 +3,7 @@ from django.core.cache import cache
 
 
 class HasRole(BasePermission):
-    """Require one of the roles to access the view.
+    """Require one of the Django Group names to access the view.
 
     Use by setting `required_roles = ['Admin', 'Registrar']` on the view.
     """
@@ -15,22 +15,20 @@ class HasRole(BasePermission):
             return True
         if not user or not user.is_authenticated:
             return False
-        # Try cached roles first (seeded by RolesPermissionsView); fallback to DB
+        # Try cached roles first (seeded by RolesPermissionsView); fallback to DB via groups
         cache_key = f"rolesperms:v2:{user.id}"
         cached = cache.get(cache_key)
         if cached and 'roles' in cached:
             user_roles = set(cached['roles'])
         else:
-            user_roles = set(
-                user.user_roles.select_related('role').values_list('role__name', flat=True)
-            )
+            user_roles = set(user.groups.values_list('name', flat=True))
         return any(r in user_roles for r in roles)
 
 
 class HasAnyPermission(BasePermission):
-    """Require any of the custom permissions by codename.
+    """Require any Django permission by fully qualified codename (app_label.codename).
 
-    Set `required_permissions = ['students.view_sensitive', 'fees.refund']` on the view.
+    Set `required_permissions = ['students.view_student', 'fees.refund']` on the view.
     """
 
     def has_permission(self, request, view):
@@ -45,9 +43,7 @@ class HasAnyPermission(BasePermission):
         if cached and 'permissions' in cached:
             user_perms = set(cached['permissions'])
         else:
-            user_perms = set(
-                user.user_roles.values_list('role__role_permissions__permission__codename', flat=True)
-            )
+            user_perms = set(user.get_all_permissions())
         return any(p in user_perms for p in perms)
 
 
